@@ -1,21 +1,4 @@
-# ============================================================
-# MEGACAPACETES — Cloudflare Pages Configuration
-# Documentação: https://developers.cloudflare.com/pages/
-# ============================================================
-
-name = "megacapacetes"
+name = "mega-capacetes"
+pages_build_output_dir = "dist/static"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
-
-# O backend é servido pelo Supabase Edge Functions.
-# O Cloudflare Pages serve apenas o frontend estático.
-
-# Variáveis de ambiente (não-secretas)
-# Secrets são configurados no Dashboard: Settings > Environment Variables
-[vars]
-SITE_URL = "https://megacapacetes.store"
-NODE_ENV = "production"
-
-# ── DESENVOLVIMENTO LOCAL ─────────────────────────────────────
-# Para rodar localmente: npm run dev
-# O Cloudflare Plugin no vite.config.ts cuida do ambiente local.
