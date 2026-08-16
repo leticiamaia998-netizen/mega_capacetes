@@ -1,0 +1,94 @@
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #fff;
+  color: #0b1f3a;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.storefront-error {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  color: #0b1f3a;
+  font: 500 14px/1.6 Poppins, Arial, sans-serif;
+  text-align: center;
+}
+
+.bg-neutral-950,
+.bg-neutral-900,
+.bg-neutral-800,
+.bg-black,
+.bg-\[\#0a0a0a\] {
+  background-color: #0b1f3a !important;
+}
+
+.bg-black\/10 {
+  background-color: rgb(11 31 58 / 0.1) !important;
+}
+
+.bg-black\/40 {
+  background-color: rgb(11 31 58 / 0.4) !important;
+}
+
+.bg-black\/50 {
+  background-color: rgb(11 31 58 / 0.5) !important;
+}
+
+.bg-black\/60 {
+  background-color: rgb(11 31 58 / 0.6) !important;
+}
+
+.bg-black\/70 {
+  background-color: rgb(11 31 58 / 0.7) !important;
+}
+
+.bg-black\/80 {
+  background-color: rgb(11 31 58 / 0.8) !important;
+}
+
+.text-neutral-950,
+.text-neutral-900 {
+  color: #0b1f3a !important;
+}
+
+.border-neutral-900 {
+  border-color: #0b1f3a !important;
+}
+
+.hover\:bg-neutral-900:hover {
+  background-color: #123763 !important;
+}
+
+.hover\:bg-black:hover,
+.hover\:bg-neutral-800:hover,
+.hover\:bg-neutral-700:hover {
+  background-color: #123763 !important;
+}
+
+button.bg-emerald-600,
+a.bg-emerald-600,
+button.bg-emerald-500,
+a.bg-emerald-500,
+.hover\:bg-emerald-700:hover {
+  background-color: #0b1f3a !important;
+  border-color: #0b1f3a !important;
+}
+
+button.bg-\[\#f5f5f5\] {
+  background-color: #e8f0fb !important;
+  color: #0b1f3a !important;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline-color: #1d5ca8;
+}

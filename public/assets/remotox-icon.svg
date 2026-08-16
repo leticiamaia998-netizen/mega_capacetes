@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="MegaCapacetes">
+  <rect width="96" height="96" rx="24" fill="#0B1F3A"/>
+  <path d="M14 76V20h16l14 23 14-23h16v56H57V48L44 68 31 48v28H14Z" fill="#FFFFFF"/>
+  <path d="M81 30c-4-7-11-11-19-11-16 0-27 12-27 29s11 29 27 29c8 0 15-4 19-11L69 57c-2 4-4 5-7 5-6 0-10-5-10-14s4-14 10-14c3 0 5 1 7 5l12-9Z" fill="#4F8EDC"/>
+</svg>
