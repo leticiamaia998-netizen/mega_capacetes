@@ -29,7 +29,7 @@ export default function LegacyStorefront() {
     const script = document.createElement("script");
     script.id = APP_SCRIPT_ID;
     script.type = "module";
-    script.src = "/assets/index-D36WQRm9.js?v=ironpay-20260817";
+    script.src = "/assets/index-ironpay-20260817.js";
     script.addEventListener("error", () => setFailed(true), { once: true });
     document.body.appendChild(script);
   }, []);
