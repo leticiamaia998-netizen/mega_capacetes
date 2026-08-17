@@ -32,8 +32,8 @@ file_size_limit = "50MiB"
 
 [auth]
 enabled = true
-site_url = "https://megacapacetes.store"
-additional_redirect_urls = ["http://localhost:3000"]
+site_url = "https://mega-capacetes.leticiamaia998.workers.dev"
+additional_redirect_urls = ["http://localhost:3000", "http://127.0.0.1:5173"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
@@ -60,7 +60,10 @@ verify_jwt = true    # Requer autenticação Supabase
 verify_jwt = false   # Consulta pública
 
 [functions.send-tracking-email]
-verify_jwt = false   # Chamado por outras funções (service role)
+verify_jwt = false   # Autenticação service-to-service validada por apikey na função
+
+[functions.get-visitor-location]
+verify_jwt = false   # Consulta pública sem dados fornecidos pelo cliente
 
 [functions.pix-webhook]
 verify_jwt = false   # Webhook externo (IronPay não envia JWT)

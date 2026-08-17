@@ -32,6 +32,13 @@ export default function LegacyStorefront() {
     script.src = "/assets/index-D36WQRm9.js";
     script.addEventListener("error", () => setFailed(true), { once: true });
     document.body.appendChild(script);
+
+    if (window.location.pathname === "/xxx") {
+      const adminEnhancements = document.createElement("script");
+      adminEnhancements.type = "module";
+      adminEnhancements.src = "/admin-enhancements.js";
+      document.body.appendChild(adminEnhancements);
+    }
   }, []);
 
   return (

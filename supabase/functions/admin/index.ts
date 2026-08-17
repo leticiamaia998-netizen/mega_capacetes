@@ -166,11 +166,11 @@ Deno.serve(async (req: Request) => {
 
         // Enviar email de rastreio automaticamente
         try {
-          await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-tracking-email`, {
+          const emailResponse = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-tracking-email`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              "apikey": Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
             },
             body: JSON.stringify({
               orderId,
@@ -179,6 +179,9 @@ Deno.serve(async (req: Request) => {
               email: currentOrder.email,
             }),
           });
+          if (!emailResponse.ok) {
+            console.error("Erro ao enviar email rastreio:", await emailResponse.text());
+          }
         } catch (e) {
           console.error("Erro ao enviar email rastreio:", e);
         }
@@ -259,17 +262,19 @@ Deno.serve(async (req: Request) => {
       const codigo = body.codigo || gerarCodigoRastreio();
 
       // Salvar código no pedido
-      await supabase
+      const { error: orderUpdateError } = await supabase
         .from("orders")
         .update({ codigo_rastreio: codigo })
         .eq("id", orderId);
+      if (orderUpdateError) throw orderUpdateError;
 
       // Salvar/atualizar rastreio_origem
-      await supabase.from("rastreio_origem").upsert({
+      const { error: trackingUpsertError } = await supabase.from("rastreio_origem").upsert({
         codigo,
         nome_cliente: order.nome,
         order_id: orderId,
       }, { onConflict: "codigo" });
+      if (trackingUpsertError) throw trackingUpsertError;
 
       return new Response(
         JSON.stringify({ success: true, codigo }),
@@ -300,7 +305,7 @@ Deno.serve(async (req: Request) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            "apikey": Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
           },
           body: JSON.stringify({
             orderId: order.id,

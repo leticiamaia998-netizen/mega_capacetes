@@ -83,7 +83,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Evitar processar duas vezes
-    if (order.status === "pago") {
+    if (order.status === "pago" || order.status === "paid") {
       return new Response(JSON.stringify({ received: true, action: "already_paid" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -114,22 +114,25 @@ async function processarPagamento(
   const codigo = (order.codigo_rastreio as string) || gerarCodigoRastreio();
 
   // Atualizar pedido
-  await supabase
+  const { error: orderUpdateError } = await supabase
     .from("orders")
     .update({
       status: "pago",
+      paid_at: new Date().toISOString(),
       codigo_rastreio: codigo,
       transaction_id: String(webhookBody.id || webhookBody.charge_id || ""),
     })
     .eq("id", order.id);
+  if (orderUpdateError) throw orderUpdateError;
 
   // Salvar rastreio_origem (se ainda não existe)
   if (!order.codigo_rastreio) {
-    await supabase.from("rastreio_origem").insert({
+    const { error: trackingError } = await supabase.from("rastreio_origem").insert({
       codigo,
       nome_cliente: order.nome as string,
       order_id: order.id as string,
-    }).catch(() => {}); // ignore duplicates
+    });
+    if (trackingError && trackingError.code !== "23505") throw trackingError;
   }
 
   // Notificação admin
@@ -144,16 +147,19 @@ async function processarPagamento(
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  await fetch(`${supabaseUrl}/functions/v1/send-tracking-email`, {
+  const emailResponse = await fetch(`${supabaseUrl}/functions/v1/send-tracking-email`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+    headers: { "Content-Type": "application/json", apikey: serviceKey },
     body: JSON.stringify({
       orderId: order.id,
       codigoRastreio: codigo,
       nomeCliente: order.nome,
       email: order.email,
     }),
-  }).catch((e) => console.error("Erro email rastreio:", e));
+  });
+  if (!emailResponse.ok) {
+    console.error("Erro email rastreio:", await emailResponse.text());
+  }
 
   // FB Purchase
   if (!order.purchase_sent) {

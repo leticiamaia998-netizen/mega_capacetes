@@ -8,12 +8,35 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SITE_URL = "https://megacapacetes.store";
+const SITE_URL = Deno.env.get("SITE_URL") ?? "https://mega-capacetes.leticiamaia998.workers.dev";
 const STORE_NAME = "Mega Capacetes";
+
+function getConfiguredSecretKeys(): string[] {
+  const keys: string[] = [];
+  const legacyKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (legacyKey) keys.push(legacyKey);
+
+  try {
+    const secretKeys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}") as Record<string, string>;
+    keys.push(...Object.values(secretKeys));
+  } catch {
+    // Mantém compatibilidade com projetos que ainda usam somente a chave legada.
+  }
+
+  return keys;
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  const apiKey = req.headers.get("apikey");
+  if (!apiKey || !getConfiguredSecretKeys().includes(apiKey)) {
+    return new Response(JSON.stringify({ error: "Não autorizado" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
@@ -28,6 +51,13 @@ Deno.serve(async (req: Request) => {
 
     const resendKey = Deno.env.get("RESEND_API_KEY");
     const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") ?? `noreply@megacapacetes.store`;
+
+    if (!resendKey) {
+      return new Response(JSON.stringify({ error: "RESEND_API_KEY não configurada" }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const nomeFirst = nomeCliente?.split(" ")[0] ?? "Cliente";
     const rastreioUrl = `${SITE_URL}/rastrear-pedido?codigo=${codigoRastreio}`;
