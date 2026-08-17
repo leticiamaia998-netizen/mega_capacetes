@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">IronPay</title>
+  <rect width="64" height="64" rx="16" fill="#111827"/>
+  <path d="M20 17h24v7H20zm0 12h24v7H20zm0 12h24v7H20z" fill="#fff"/>
+  <circle cx="47" cy="47" r="9" fill="#16a34a"/>
+  <path d="m43 47 3 3 5-6" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
