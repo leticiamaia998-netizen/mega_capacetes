@@ -33,10 +33,43 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // ── 1. Criar pedido no banco ──────────────────────────────
-    const { data: order, error: orderError } = await supabase
+    // ── 1. Reutilizar PIX válido/tentativa recente ou criar pedido ────
+    // Evita gerar outra cobrança quando o cliente atualiza a página ou
+    // tenta novamente enquanto o PIX anterior ainda está válido.
+    const nowIso = new Date().toISOString();
+    const { data: activePixOrder } = await supabase
       .from("orders")
-      .insert({
+      .select("*")
+      .eq("email", customer.email)
+      .eq("valor", amount)
+      .eq("status", "pending")
+      .gt("pix_expires_at", nowIso)
+      .neq("pix_copy_paste", "")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let recentOrder = activePixOrder;
+    if (!recentOrder) {
+      const recentThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const { data } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("email", customer.email)
+        .eq("valor", amount)
+        .eq("status", "pending")
+        .gte("created_at", recentThreshold)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      recentOrder = data;
+    }
+
+    let order = recentOrder;
+    let orderError = null;
+
+    if (!order) {
+      const result = await supabase.from("orders").insert({
         nome: customer.name,
         email: customer.email,
         telefone: customer.phone,
@@ -55,12 +88,22 @@ Deno.serve(async (req: Request) => {
         cidade: shippingAddress?.city,
         estado: shippingAddress?.state,
         metodo_pagamento: "pix",
-        status: "checkout_iniciado",
+        status: "pending",
         utm: utm ?? {},
         tracking: body.tracking ?? {},
+        customer: {
+          full_name: customer.name,
+          email: customer.email,
+          phone: customer.phone ?? "",
+          cpf: customer.cpf ?? "",
+        },
+        gateway: { gateway_type: "pix", name: "IronPay" },
       })
       .select()
       .single();
+      order = result.data;
+      orderError = result.error;
+    }
 
     if (orderError) {
       console.error("DB error:", orderError);
@@ -80,22 +123,97 @@ Deno.serve(async (req: Request) => {
     let externalId = "";
     let pixError = "";
 
+    const extractPix = (raw: Record<string, any>) => {
+      const asObject = (value: unknown): Record<string, any> | null =>
+        value !== null && typeof value === "object" && !Array.isArray(value)
+          ? value as Record<string, any>
+          : null;
+      // A IronPay também usa `transaction` como um identificador textual.
+      // Só tratamos data/transaction como payload quando forem objetos.
+      const transaction = asObject(raw.data) || asObject(raw.transaction) || raw;
+      const pix = asObject(transaction.pix) ||
+        asObject(transaction.pix_data) ||
+        asObject(transaction.payment) ||
+        asObject(transaction.payment_data) ||
+        transaction;
+      return {
+        qrCode: pix.qr_code_base64 || pix.qr_code_image || pix.qr_image || pix.qrcode || pix.qrCode || "",
+        copyPaste: pix.pix_qr_code || pix.pix_copy_paste || pix.copy_paste || pix.pix_code || pix.pix_qrcode || pix.brcode || pix.emv || pix.qr_code || "",
+        externalId: transaction.transaction_hash || transaction.hash || transaction.id || transaction.charge_id || transaction.transaction_id || order.id,
+      };
+    };
+
+    if (order?.pix_copy_paste || order?.pix_qr_code) {
+      return new Response(JSON.stringify({
+        success: true,
+        qrCode: order.pix_qr_code || "",
+        copyPaste: order.pix_copy_paste || "",
+        externalId: order.external_id || order.transaction_id || order.id,
+        orderId: order.id,
+        gatewayName: "ironpay",
+        alreadyPaid: false,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (!ironpayToken || !ironpayOfferHash || !ironpayProductHash) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Credenciais IronPay incompletas", orderId: order.id }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const cachedIronpayResponse = order?.gateway?.response;
+    if (cachedIronpayResponse) {
+      const cachedPix = extractPix(cachedIronpayResponse);
+      if (cachedPix.qrCode || cachedPix.copyPaste) {
+        await supabase.from("orders").update({
+          transaction_id: cachedPix.externalId,
+          external_id: cachedPix.externalId,
+          pix_qr_code: cachedPix.qrCode,
+          pix_copy_paste: cachedPix.copyPaste,
+          pix_error: null,
+        }).eq("id", order.id);
+        return new Response(JSON.stringify({
+          success: true,
+          ...cachedPix,
+          orderId: order.id,
+          gatewayName: "ironpay",
+          alreadyPaid: false,
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      return new Response(
+        JSON.stringify({ success: false, error: "Resposta PIX da IronPay ainda não reconhecida", orderId: order.id }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     try {
-      const ironpayRes = await fetch("https://api.ironpay.com.br/v1/pix/charge", {
+      const ironpayRes = await fetch("https://api.ironpayapp.com.br/api/public/v1/transactions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${ironpayToken}`,
         },
         body: JSON.stringify({
+          api_token: ironpayToken,
           offer_hash: ironpayOfferHash,
           product_hash: ironpayProductHash,
           amount: Math.round(amount * 100), // em centavos
+          payment_method: "pix",
+          installments: 1,
+          cart: (Array.isArray(items) ? items : []).map((item: Record<string, any>) => ({
+            offer_hash: ironpayOfferHash,
+            product_hash: ironpayProductHash,
+            quantity: Number(item.quantity) || 1,
+            price: Math.round((Number(item.price) || amount) * 100),
+            operation_type: 1,
+            title: item.name || "Produto MegaCapacetes",
+          })),
           customer: {
             name: customer.name,
             email: customer.email,
-            cpf: customer.cpf?.replace(/\D/g, ""),
-            phone: customer.phone?.replace(/\D/g, ""),
+            document: customer.cpf?.replace(/\D/g, ""),
+            phone_number: customer.phone?.replace(/\D/g, ""),
           },
           external_id: order.id,
           metadata: {
@@ -105,27 +223,44 @@ Deno.serve(async (req: Request) => {
         }),
       });
 
-      const ironpayData = await ironpayRes.json();
+      const responseText = await ironpayRes.text();
+      let ironpayData: Record<string, any> = {};
+      try {
+        ironpayData = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        ironpayData = { message: responseText || `IronPay HTTP ${ironpayRes.status}` };
+      }
       console.log("IronPay response:", JSON.stringify(ironpayData));
 
       if (ironpayRes.ok && ironpayData) {
-        // IronPay retorna qr_code e copy_paste (verificar campo exato no seu plano)
-        qrCode = ironpayData.qr_code_base64 || ironpayData.qr_code_image || ironpayData.qr_image || "";
-        copyPaste = ironpayData.pix_copy_paste || ironpayData.copy_paste || ironpayData.brcode || ironpayData.emv || "";
-        externalId = ironpayData.id || ironpayData.charge_id || ironpayData.transaction_id || order.id;
+        const extracted = extractPix(ironpayData);
+        qrCode = extracted.qrCode;
+        copyPaste = extracted.copyPaste;
+        externalId = extracted.externalId;
 
         // Atualizar pedido com dados do PIX
         await supabase
           .from("orders")
           .update({
-            status: "pix_gerado",
+            status: "pending",
             transaction_id: externalId,
             external_id: externalId,
             pix_qr_code: qrCode,
             pix_copy_paste: copyPaste,
             pix_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30min
+            pix_error: null,
+            gateway: { gateway_type: "pix", name: "IronPay", response: ironpayData },
           })
           .eq("id", order.id);
+
+        if (!copyPaste && !qrCode) {
+          pixError = "Resposta PIX da IronPay sem código reconhecido";
+          await supabase.from("pix_errors").insert({
+            order_id: order.id,
+            error_message: pixError,
+            error_details: ironpayData,
+          });
+        }
 
       } else {
         pixError = ironpayData?.message || ironpayData?.error || "Erro IronPay";
