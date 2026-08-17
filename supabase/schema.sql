@@ -46,6 +46,7 @@ create table if not exists public.orders (
   metodo_pagamento text default 'pix',
   transaction_id text,       -- ID da transação na IronPay
   external_id text,          -- ID externo/gateway
+  paid_at timestamptz,
 
   -- rastreio
   codigo_rastreio text,
@@ -199,6 +200,15 @@ alter table public.pix_errors enable row level security;
 alter table public.price_overrides enable row level security;
 alter table public.user_roles enable row level security;
 
+drop policy if exists "users_read_own_role" on public.user_roles;
+create policy "users_read_own_role"
+  on public.user_roles for select
+  to authenticated
+  using (user_id = auth.uid());
+
+create index if not exists user_roles_user_id_role_idx
+  on public.user_roles(user_id, role);
+
 -- Políticas públicas de leitura (para o frontend anonimamente ler orders_status)
 drop policy if exists "orders_status_public_read" on public.orders_status;
 create policy "orders_status_public_read"
@@ -221,7 +231,15 @@ create policy "price_overrides_public_read"
 drop policy if exists "admin_orders_all" on public.orders;
 create policy "admin_orders_all"
   on public.orders for all
+  to authenticated
   using (
+    exists (
+      select 1 from public.user_roles
+      where user_id = auth.uid()
+      and role = 'admin'
+    )
+  )
+  with check (
     exists (
       select 1 from public.user_roles
       where user_id = auth.uid()
@@ -232,6 +250,45 @@ create policy "admin_orders_all"
 drop policy if exists "admin_notifications_all" on public.notifications;
 create policy "admin_notifications_all"
   on public.notifications for all
+  to authenticated
+  using (
+    exists (
+      select 1 from public.user_roles
+      where user_id = auth.uid()
+      and role = 'admin'
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.user_roles
+      where user_id = auth.uid()
+      and role = 'admin'
+    )
+  );
+
+drop policy if exists "admin_price_overrides_all" on public.price_overrides;
+create policy "admin_price_overrides_all"
+  on public.price_overrides for all
+  to authenticated
+  using (
+    exists (
+      select 1 from public.user_roles
+      where user_id = auth.uid()
+      and role = 'admin'
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.user_roles
+      where user_id = auth.uid()
+      and role = 'admin'
+    )
+  );
+
+drop policy if exists "admin_pix_errors_select" on public.pix_errors;
+create policy "admin_pix_errors_select"
+  on public.pix_errors for select
+  to authenticated
   using (
     exists (
       select 1 from public.user_roles

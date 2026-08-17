@@ -149,16 +149,20 @@ Deno.serve(async (req: Request) => {
       const updateData: Record<string, unknown> = { status: newStatus };
 
       // Se marcando como pago, gerar código de rastreio automático
-      if (newStatus === "pago" && !currentOrder.codigo_rastreio) {
+      const isPaid = newStatus === "paid" || newStatus === "pago";
+      updateData.paid_at = isPaid ? new Date().toISOString() : null;
+
+      if (isPaid && !currentOrder.codigo_rastreio) {
         const codigo = gerarCodigoRastreio();
         updateData.codigo_rastreio = codigo;
 
         // Salvar em rastreio_origem
-        await supabase.from("rastreio_origem").insert({
+        const { error: trackingError } = await supabase.from("rastreio_origem").insert({
           codigo,
           nome_cliente: currentOrder.nome,
           order_id: orderId,
         });
+        if (trackingError) throw trackingError;
 
         // Enviar email de rastreio automaticamente
         try {
@@ -223,7 +227,11 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      await supabase.from("orders").update(updateData).eq("id", orderId);
+      const { error: updateError } = await supabase
+        .from("orders")
+        .update(updateData)
+        .eq("id", orderId);
+      if (updateError) throw updateError;
 
       return new Response(
         JSON.stringify({ success: true, codigoRastreio: updateData.codigo_rastreio }),
