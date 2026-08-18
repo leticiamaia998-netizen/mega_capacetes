@@ -76,3 +76,6 @@ verify_jwt = false   # Chamado por outras funções
 
 [functions.checkout]
 verify_jwt = false   # Chamado pelo frontend
+
+[functions.checkout-card]
+verify_jwt = false   # Checkout público; origem, pedido e payload validados na função

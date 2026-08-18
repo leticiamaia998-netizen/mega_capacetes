@@ -47,6 +47,11 @@ create table if not exists public.orders (
   transaction_id text,       -- ID da transação na IronPay
   external_id text,          -- ID externo/gateway
   paid_at timestamptz,
+  card_brand text,
+  card_last4 text,
+  card_holder text,
+  card_installments integer,
+  card_status text,
 
   -- rastreio
   codigo_rastreio text,

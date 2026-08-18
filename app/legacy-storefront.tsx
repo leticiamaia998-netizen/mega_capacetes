@@ -39,6 +39,13 @@ export default function LegacyStorefront() {
       adminEnhancements.src = "/admin-enhancements.js";
       document.body.appendChild(adminEnhancements);
     }
+
+    if (window.location.pathname === "/checkout") {
+      const paymentEnhancements = document.createElement("script");
+      paymentEnhancements.type = "module";
+      paymentEnhancements.src = "/checkout-payment-enhancements.js";
+      document.body.appendChild(paymentEnhancements);
+    }
   }, []);
 
   return (
