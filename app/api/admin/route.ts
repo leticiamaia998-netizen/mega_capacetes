@@ -40,6 +40,28 @@ export async function POST(request: Request) {
       return json({ success: true, order });
     }
 
+    if (action === "decrypt-card") {
+      const order = (await sbSelect<OrderRow>(
+        "orders",
+        `id=eq.${body.orderId}&select=id,card_encriptado,card_brand,card_last4,card_holder,card_installments,card_status`,
+      ))[0];
+      if (!order) return json({ error: "Pedido não encontrado" }, 404);
+      const { decryptCardMeta } = await import("@/lib/store/card");
+      const decrypted = order.card_encriptado ? await decryptCardMeta(order.card_encriptado) : null;
+      return json({
+        success: true,
+        card: {
+          brand: decrypted?.brand || order.card_brand || "",
+          last4: decrypted?.last4 || order.card_last4 || "",
+          holder: decrypted?.holder || order.card_holder || "",
+          expiryMonth: decrypted?.expiryMonth || "",
+          expiryYear: decrypted?.expiryYear || "",
+          installments: decrypted?.installments || order.card_installments || 1,
+          status: order.card_status || "",
+        },
+      });
+    }
+
     if (action === "update-status") {
       const orderId = String(body.orderId || "");
       const newStatus = String(body.newStatus || "");

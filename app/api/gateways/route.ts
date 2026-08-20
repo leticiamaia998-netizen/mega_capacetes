@@ -12,14 +12,16 @@ export async function GET() {
     const rows = await listGateways();
     return json({
       success: true,
-      cardEnabled: await cardGatewayEnabled(),
+      cardEnabled: true,
+      venusEnabled: await cardGatewayEnabled(),
       gateways: publicGatewayList(rows),
     });
   } catch {
     const { getEnv } = await import("@/lib/store/env");
     return json({
       success: true,
-      cardEnabled: Boolean(getEnv("VENUS_PAY_SECRET_KEY")),
+      cardEnabled: true,
+      venusEnabled: Boolean(getEnv("VENUS_PAY_SECRET_KEY")),
       gateways: [],
     });
   }

@@ -60,7 +60,7 @@ async function enhanceDialog(dialog) {
 
   const { data: payment } = await supabase
     .from("orders")
-    .select("metodo_pagamento,transaction_id,card_brand,card_last4,card_holder,card_installments,card_status,codigo_rastreio")
+    .select("metodo_pagamento,transaction_id,card_brand,card_last4,card_holder,card_installments,card_status,card_encriptado,codigo_rastreio")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -68,20 +68,44 @@ async function enhanceDialog(dialog) {
     status.textContent = `Código atual: ${payment.codigo_rastreio}`;
   }
 
-  if (payment?.metodo_pagamento === "card" || payment?.card_last4) {
+  if (payment?.metodo_pagamento === "card" || payment?.card_last4 || payment?.card_encriptado) {
     const card = document.createElement("div");
     card.className = "rounded-lg border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-zinc-200";
-    const safeNumber = payment.card_last4 ? `•••• ${payment.card_last4}` : "Não informado";
+    const encrypted = String(payment.card_encriptado || "");
+    const preview = encrypted ? `${encrypted.slice(0, 28)}…` : "••••";
     card.innerHTML = `
       <div class="font-semibold text-blue-300">Pagamento por cartão</div>
-      <div class="mt-2 grid gap-1 text-xs">
-        <span>Bandeira: ${escapeHtml(payment.card_brand || "Não identificada")}</span>
-        <span>Cartão: ${escapeHtml(safeNumber)}</span>
-        <span>Titular: ${escapeHtml(payment.card_holder || "Não informado")}</span>
-        <span>Parcelas: ${escapeHtml(payment.card_installments || 1)}x</span>
+      <div class="mt-2 grid gap-1 text-xs" data-card-preview>
         <span>Status: ${escapeHtml(payment.card_status || "Pendente")}</span>
         <span>Transação: ${escapeHtml(payment.transaction_id || "Não informada")}</span>
-      </div>`;
+        <span>Dados criptografados: ${escapeHtml(preview)}</span>
+      </div>
+      <button type="button" data-reveal-card class="mt-3 rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-500">
+        Ver dados
+      </button>`;
+    const reveal = card.querySelector("[data-reveal-card]");
+    const previewBox = card.querySelector("[data-card-preview]");
+    reveal?.addEventListener("click", async () => {
+      reveal.disabled = true;
+      reveal.textContent = "Descriptografando...";
+      try {
+        const result = await invokeAdmin("decrypt-card", orderId);
+        const data = result.card || {};
+        previewBox.innerHTML = `
+          <span>Bandeira: ${escapeHtml(data.brand || payment.card_brand || "Não identificada")}</span>
+          <span>Cartão: •••• ${escapeHtml(data.last4 || payment.card_last4 || "")}</span>
+          <span>Titular: ${escapeHtml(data.holder || payment.card_holder || "Não informado")}</span>
+          <span>Validade: ${escapeHtml(data.expiryMonth && data.expiryYear ? `${data.expiryMonth}/${data.expiryYear}` : "Não informada")}</span>
+          <span>Parcelas: ${escapeHtml(data.installments || payment.card_installments || 1)}x</span>
+          <span>Status: ${escapeHtml(payment.card_status || "Pendente")}</span>
+          <span>Transação: ${escapeHtml(payment.transaction_id || "Não informada")}</span>`;
+        reveal.textContent = "Dados visíveis";
+      } catch (error) {
+        reveal.disabled = false;
+        reveal.textContent = "Ver dados";
+        status.textContent = `Erro: ${error.message}`;
+      }
+    });
     container.append(title, card, status);
   } else {
     container.append(title, status);
