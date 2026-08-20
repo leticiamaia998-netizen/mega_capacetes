@@ -59,6 +59,19 @@ Deno.serve(async (req: Request) => {
 
   const secretKey = Deno.env.get("VENUS_PAY_SECRET_KEY");
   const productId = Deno.env.get("VENUS_PAY_PRODUCT_ID");
+  const siteUrl = Deno.env.get("SITE_URL");
+  if (siteUrl) {
+    const proxied = await fetch(`${siteUrl.replace(/\/$/, "")}/api/card/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(await req.json()),
+    });
+    const text = await proxied.text();
+    return new Response(text, {
+      status: proxied.status,
+      headers: { ...headers, "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  }
   if (!secretKey) {
     return json({ configured: false, error: "Pagamento por cartão ainda não configurado" }, 503, headers);
   }
@@ -108,7 +121,7 @@ Deno.serve(async (req: Request) => {
     const gateway = await gatewayResponse.json();
     const transactionId = gateway.transaction_id || gateway.id || null;
     const approved = gateway.success === true && transactionId;
-    const status = approved ? "pago" : "cartao_recusado";
+    const status = approved ? "paid" : "cartao_recusado";
 
     const { error: updateError } = await supabase.from("orders").update({
       metodo_pagamento: "card",

@@ -1,220 +1,199 @@
-# 🪖 MegaCapacetes — Guia de Setup do Backend
+# MegaCapacetes — Passo a passo
 
-Este guia explica como configurar o backend completo do MegaCapacetes.  
-O **frontend já está compilado** em `public/assets/` — não precisa tocar nele.
-
----
-
-## 📋 Visão Geral da Arquitetura
-
-| Camada | Tecnologia | O que faz |
-|--------|-----------|-----------|
-| Frontend | React (compilado) | Loja, checkout, admin, rastreio |
-| Banco de dados | Supabase (PostgreSQL) | Pedidos, rastreio, notificações |
-| Backend | Supabase Edge Functions | PIX, emails, Facebook, UTMify |
-| Hospedagem | Cloudflare Pages | Serve o site estático |
-| PIX | IronPay | Gateway de pagamento |
-| Email | Resend | Confirmações e rastreio |
+Arquitetura: **Supabase = só tabelas**. **Cloudflare = site + `/api/*`**.  
+Não crie Edge Functions nem secrets no Supabase.
 
 ---
 
-## PASSO 1 — Configurar o Supabase
+## 1. Banco no Supabase (projeto Capacetes19-08)
 
-### 1.1 Criar o banco de dados
+1. Abra o projeto no [supabase.com](https://supabase.com).
+2. Vá em **SQL Editor → New Query**.
+3. Cole **todo** o arquivo `supabase/migrations/20260819000000_pdf_backend_alignment.sql`.
+4. Clique em **Run**.
 
-1. Acesse [supabase.com](https://supabase.com) → seu projeto
-2. Vá em **SQL Editor** → clique em **New Query**
-3. Cole **todo o conteúdo** do arquivo `supabase/schema.sql`
-4. Clique em **Run** (▶️)
+Não rode o `schema.sql` separado. Esse arquivo já cria as tabelas.
 
-✅ Isso cria todas as tabelas: `orders`, `orders_status`, `rastreio_origem`, `notifications`, `payment_gateways`, `pix_errors`, `price_overrides`, `user_roles`
+5. Confira em **Table Editor** se existem: `orders`, `rastreio_origem`, `payment_gateways`, `notifications`, `comprovantes_taxa`, `user_roles`.
 
-### 1.2 Criar o usuário admin
+---
 
-1. Vá em **Authentication → Users → Add User**
-2. Email: `admin@megacapacetes.store` (ou o que preferir)
-3. Password: crie uma senha forte
-4. Após criar, copie o **UUID** do usuário
-5. No **SQL Editor**, execute:
+## 2. Usuário admin (login do painel `/xxx`)
+
+1. **Authentication → Users → Add User**.
+2. Email e senha fortes (ex: `admin@megacapacetes.store`).
+3. Copie o **UUID** do usuário.
+4. No SQL Editor:
+
 ```sql
 INSERT INTO public.user_roles (user_id, role)
 VALUES ('COLE-O-UUID-AQUI', 'admin');
 ```
 
-### 1.3 Deploy das Edge Functions
+---
 
-No terminal, com [Supabase CLI](https://supabase.com/docs/guides/cli) instalado:
+## 3. Copiar as chaves do Supabase
+
+Em **Project Settings → API**:
+
+| Copiar | Colar no Cloudflare como |
+|--------|--------------------------|
+| Project URL | `SUPABASE_URL` e `VITE_SUPABASE_URL` |
+| `anon` / publishable | `SUPABASE_ANON_KEY` e `VITE_SUPABASE_ANON_KEY` |
+| `service_role` / secret | `SUPABASE_SERVICE_ROLE_KEY` |
+
+A `service_role` não vai no frontend. Só no Cloudflare.
+
+---
+
+## 4. Deploy no Cloudflare
+
+1. [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages**.
+2. Conecte o repositório **MegaCapacetes** (Git).
+3. Build:
+   - **Build command:** `npm run build`
+   - **Output directory:** `dist` (ou o que o vinext gerar; se o projeto já estiver no Worker, mantenha o mesmo projeto).
+4. **Save and Deploy**.
+
+Anote a URL pública, por exemplo:
+
+`https://SEU-DOMINIO` ou `https://mega-capacetes.xxxx.workers.dev`
+
+Essa URL é o `SITE_URL`.
+
+---
+
+## 5. Variáveis no Cloudflare (não no Supabase)
+
+**Workers & Pages → seu projeto → Settings → Variables and Secrets** (Production).
+
+Obrigatórias:
+
+```
+SUPABASE_URL
+SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+VITE_SUPABASE_URL          (mesmo valor de SUPABASE_URL)
+VITE_SUPABASE_ANON_KEY     (mesmo valor de SUPABASE_ANON_KEY)
+SITE_URL                   (URL pública do passo 4, sem barra no final)
+IRONPAY_API_TOKEN
+IRONPAY_OFFER_HASH
+IRONPAY_PRODUCT_HASH
+RESEND_API_KEY
+RESEND_FROM_EMAIL
+CRON_SECRET
+ADMIN_USER
+ADMIN_PASS
+ADMIN_SESSION_SECRET       (texto aleatório com 64+ caracteres)
+```
+
+Opcionais (se for usar):
+
+```
+VENUS_PAY_SECRET_KEY
+VENUS_PAY_PRODUCT_ID
+MASTERFY_API_KEY
+UMBRELLAPAG_API_KEY
+FB_PIXEL_ID
+FB_ACCESS_TOKEN
+UTMIFY_API_TOKEN
+ENCRYPT_KEY
+```
+
+Depois de salvar, **faça um novo deploy** (as vars só entram no próximo build/deploy).
+
+---
+
+## 6. KV de rate limit PIX
+
+1. Cloudflare → **Workers & Pages → KV**.
+2. **Create namespace** → nome: `pix-ratelimit`.
+3. No projeto da loja → **Settings → Bindings** → Add:
+   - Tipo: **KV Namespace**
+   - Variable name: `PIX_RATELIMIT`
+   - Namespace: `pix-ratelimit`
+4. Deploy de novo.
+
+Limite: 5 gerações de PIX por IP por hora.
+
+---
+
+## 7. Webhook do PIX
+
+No painel da IronPay (e nos outros PIX, se usar):
+
+```
+https://SEU-DOMINIO/api/pix/webhook
+```
+
+Troque `SEU-DOMINIO` pelo `SITE_URL` real.
+
+Venus Pay PIX: cadastre o mesmo webhook no painel da Venus, se for usar.
+
+---
+
+## 8. E-mail (Resend)
+
+1. Conta em [resend.com](https://resend.com).
+2. Verifique o domínio (SPF + DKIM).
+3. API Key → `RESEND_API_KEY`.
+4. Remetente → `RESEND_FROM_EMAIL` (ex: `contato@megacapacetes.store`).
+
+---
+
+## 9. Cron de carrinho abandonado
+
+1. Conta em [cron-job.org](https://cron-job.org).
+2. Novo job:
+   - Método: **POST**
+   - URL: `https://SEU-DOMINIO/api/process-recovery-queue`
+   - Header: `x-cron-secret` = o mesmo valor de `CRON_SECRET`
+   - Intervalo: **a cada 15 minutos**
+
+---
+
+## 10. Testar
+
+1. Home da loja abre com os produtos.
+2. Carrinho → checkout → PIX gera QR / copia-e-cola.
+3. Pague um PIX de teste → pedido vira pago e gera código `MC…`.
+4. Abra `/rastrear-pedido?codigo=CODIGO`.
+5. Confira o e-mail de rastreio.
+6. Admin: `https://SEU-DOMINIO/admin` (vai para `/xxx`) com o usuário do passo 2.
+7. No admin, aba Gateways: um PIX ativo por vez; cartão Venus independente.
+8. Se Venus estiver ativo e com credencial, o checkout mostra cartão.
+
+Teste rápido da API:
 
 ```bash
-# Instalar CLI (se não tiver)
-npm install -g supabase
-
-# Login
-supabase login
-
-# Link com seu projeto (pegue o Project ID em: Settings > General)
-supabase link --project-ref SEU_PROJECT_ID
-
-# Deploy de todas as Edge Functions de uma vez
-supabase functions deploy checkout-create-pix
-supabase functions deploy admin
-supabase functions deploy orders
-supabase functions deploy send-tracking-email
-supabase functions deploy pix-webhook
-supabase functions deploy fb-purchase
-supabase functions deploy utmify-order
-supabase functions deploy checkout
-```
-
-### 1.4 Configurar secrets das Edge Functions
-
-No **Supabase Dashboard → Settings → Edge Functions → Manage Secrets**, adicione:
-
-| Secret | Valor |
-|--------|-------|
-| `SUPABASE_URL` | URL do seu projeto Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service Role Key do Supabase |
-| `SUPABASE_ANON_KEY` | Anon Key do Supabase |
-| `IRONPAY_API_TOKEN` | Token da IronPay |
-| `IRONPAY_OFFER_HASH` | Hash da oferta IronPay |
-| `IRONPAY_PRODUCT_HASH` | Hash do produto IronPay |
-| `RESEND_API_KEY` | API Key da Resend |
-| `RESEND_FROM_EMAIL` | Ex: `contato@megacapacetes.store` |
-| `FB_PIXEL_ID` | ID do Pixel do Facebook |
-| `FB_ACCESS_TOKEN` | Token CAPI do Facebook |
-| `UTMIFY_API_TOKEN` | Token da UTMify |
-
----
-
-## PASSO 2 — Configurar o Cloudflare Pages
-
-### 2.1 Criar o projeto no Cloudflare Pages
-
-1. Acesse [dash.cloudflare.com](https://dash.cloudflare.com) → **Pages**
-2. Clique em **Create a project → Connect to Git**
-3. Conecte o repositório `MegaCapacetes`
-4. Configure o build:
-   - **Framework preset**: None (ou Next.js)
-   - **Build command**: `npm run build`
-   - **Build output directory**: `.next` (ou `dist`)
-
-### 2.2 Configurar Variáveis de Ambiente no Cloudflare Pages
-
-Vá em **Settings → Environment Variables** e adicione:
-
-| Variável | Valor |
-|----------|-------|
-| `VITE_SUPABASE_URL` | URL do Supabase (ex: `https://xxx.supabase.co`) |
-| `VITE_SUPABASE_ANON_KEY` | Anon Key do Supabase |
-
-> ⚠️ **Atenção**: O frontend já foi pré-compilado com as URLs do Supabase. Se o projeto foi compilado com URLs diferentes, você precisará recompilar o frontend com as novas URLs.
-
----
-
-## PASSO 3 — Configurar Webhook IronPay
-
-No painel da IronPay, configure a URL de webhook:
-
-```
-https://SEU_PROJETO.supabase.co/functions/v1/pix-webhook
-```
-
-Isso é necessário para que os pagamentos PIX sejam confirmados automaticamente.
-
----
-
-## PASSO 4 — Testar
-
-### Testar a geração de PIX:
-```bash
-curl -X POST https://SEU_PROJETO.supabase.co/functions/v1/checkout-create-pix \
-  -H "Content-Type: application/json" \
-  -d '{
-    "amount": 99.90,
-    "customer": {
-      "name": "Teste Cliente",
-      "email": "teste@teste.com",
-      "cpf": "123.456.789-09",
-      "phone": "(11) 99999-9999"
-    },
-    "items": [{"name": "Capacete Teste", "quantity": 1, "price": 99.90}],
-    "shippingAddress": {
-      "cep": "01310-100",
-      "address": "Av. Paulista",
-      "number": "1000",
-      "neighborhood": "Bela Vista",
-      "city": "São Paulo",
-      "state": "SP"
-    }
-  }'
-```
-
-### Testar rastreio:
-```bash
-curl https://megacapacetes.store/rastrear-pedido?codigo=MCTESTE01
+curl -X POST https://SEU-DOMINIO/api/pix/create ^
+  -H "Content-Type: application/json" ^
+  -d "{\"amount\":9.9,\"customer\":{\"name\":\"Teste\",\"email\":\"teste@teste.com\",\"cpf\":\"12345678909\",\"phone\":\"11999999999\"},\"items\":[{\"name\":\"Teste\",\"quantity\":1,\"price\":9.9}]}"
 ```
 
 ---
 
-## 📁 Estrutura dos Arquivos de Backend
+## Checklist
 
-```
-supabase/
-├── schema.sql                         ← ⭐ RODE ISSO PRIMEIRO no SQL Editor
-├── config.toml                        ← Config do Supabase CLI
-└── functions/
-    ├── checkout-create-pix/index.ts   ← Cria pedido + gera PIX (IronPay)
-    ├── admin/index.ts                 ← Painel admin (listagem, status, rastreio)
-    ├── orders/index.ts                ← Consulta pública de pedidos e rastreio
-    ├── checkout/index.ts              ← Abandono de carrinho e recuperação
-    ├── send-tracking-email/index.ts   ← Email com código de rastreio (Resend)
-    ├── pix-webhook/index.ts           ← Webhook IronPay (PIX pago → atualiza)
-    ├── fb-purchase/index.ts           ← Evento Purchase no Facebook CAPI
-    └── utmify-order/index.ts          ← Relatório de vendas na UTMify
-```
+- [ ] SQL rodou sem erro
+- [ ] Admin criado em `user_roles`
+- [ ] Vars no Cloudflare + redeploy
+- [ ] KV `PIX_RATELIMIT` ligado
+- [ ] Webhook `/api/pix/webhook`
+- [ ] Resend com domínio verificado
+- [ ] Cron a cada 15 min
+- [ ] `SITE_URL` igual à URL final
+- [ ] PIX, rastreio, admin e e-mail ok
 
 ---
 
-## ⚠️ Regras críticas (Supabase)
+## Se algo falhar
 
-1. **Nunca use `.update()` com `.order()` ou `.limit()`** — causa falha silenciosa  
-   ✅ Sempre: SELECT o `id` primeiro → UPDATE por `id`
-
-2. **Código de rastreio salvo em DUAS tabelas**: `orders.codigo_rastreio` + `rastreio_origem`
-
-3. **Service Role Key nunca vai pro frontend** — somente nas Edge Functions
-
----
-
-## 🔧 Fluxo de Pagamento PIX
-
-```
-Cliente preenche checkout
-       ↓
-Redireciona para /pix (dados no sessionStorage)
-       ↓
-PixPage chama supabase.functions.invoke("checkout-create-pix")
-       ↓
-Edge Function cria pedido no banco + chama IronPay
-       ↓
-Retorna QR Code e Copia-e-Cola para o frontend
-       ↓
-Cliente paga → IronPay chama webhook /pix-webhook
-       ↓
-Webhook: marca pago + gera rastreio MC + envia email + FB + UTMify
-       ↓
-Frontend detecta via Realtime → redireciona para sucesso
-```
-
----
-
-## 🛡️ Acesso Admin
-
-1. Acesse: `https://megacapacetes.store/admin`
-2. Login com o email/senha criados no Passo 1.2
-3. O admin pode:
-   - Ver todos os pedidos com filtros
-   - Marcar pedidos como pagos (gera rastreio automático)
-   - Enviar email de rastreio manualmente
-   - Gerar/editar código de rastreio
-   - Ver estatísticas (total, faturamento, hoje)
+| Problema | O que checar |
+|----------|----------------|
+| PIX não gera QR | Gateway ativo no admin + `IRONPAY_*` no Cloudflare + redeploy |
+| Webhook não marca pago | `SITE_URL` e URL do webhook iguais ao domínio final |
+| Rastreio não acha o código | Código precisa existir em `orders` **e** `rastreio_origem` |
+| Admin não loga | Usuário no Auth + linha em `user_roles` |
+| E-mail não chega | DNS do Resend (SPF/DKIM) |
+| Loja usa banco antigo | `VITE_SUPABASE_URL` / `SUPABASE_URL` apontando para **Capacetes19-08** |

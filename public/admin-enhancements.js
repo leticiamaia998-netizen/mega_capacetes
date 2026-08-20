@@ -124,7 +124,30 @@ async function enhanceDialog(dialog) {
     }
   });
 
-  buttons.append(generate, send);
+  const recover = createButton(
+    "E-mail de recuperação",
+    "rounded-md border border-amber-600 bg-amber-600/20 px-3 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-600/30 disabled:opacity-50",
+  );
+  recover.addEventListener("click", async () => {
+    recover.disabled = true;
+    status.textContent = "Enviando recuperação...";
+    try {
+      const res = await fetch("/api/send-recovery-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) throw new Error(result.error || "Falha ao enviar");
+      status.textContent = "E-mail de recuperação enviado.";
+    } catch (error) {
+      status.textContent = `Erro: ${error.message}`;
+    } finally {
+      recover.disabled = false;
+    }
+  });
+
+  buttons.append(generate, send, recover);
   container.append(buttons);
   const orderIdLine = [...dialog.querySelectorAll("div")].find((element) =>
     element.textContent?.trim().startsWith("ID do Pedido:"),

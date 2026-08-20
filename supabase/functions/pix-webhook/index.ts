@@ -117,7 +117,7 @@ async function processarPagamento(
   const { error: orderUpdateError } = await supabase
     .from("orders")
     .update({
-      status: "pago",
+      status: "paid",
       paid_at: new Date().toISOString(),
       codigo_rastreio: codigo,
       transaction_id: String(webhookBody.id || webhookBody.charge_id || ""),
