@@ -88,6 +88,13 @@ export async function POST(request: Request) {
       const codigo = String(body.codigo || gerarCodigoRastreio());
       await sbUpdate("orders", `id=eq.${orderId}`, { codigo_rastreio: codigo });
       await saveRastreioOrigem(order, codigo);
+      if (body.sendEmail && order.email) {
+        await sendTrackingEmail({
+          email: String(order.email),
+          nomeCliente: order.nome,
+          codigoRastreio: codigo,
+        });
+      }
       return json({ success: true, codigo });
     }
 

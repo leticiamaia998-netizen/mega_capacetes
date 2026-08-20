@@ -102,12 +102,10 @@ export default function LegacyStorefront() {
       script.src = "/assets/index-D36WQRm9.js";
       script.addEventListener("error", () => setFailed(true), { once: true });
       script.addEventListener("load", () => {
-        if (window.location.pathname === "/xxx") {
-          const adminEnhancements = document.createElement("script");
-          adminEnhancements.type = "module";
-          adminEnhancements.src = "/admin-enhancements.js";
-          document.body.appendChild(adminEnhancements);
-        }
+        const adminEnhancements = document.createElement("script");
+        adminEnhancements.type = "module";
+        adminEnhancements.src = "/admin-enhancements.js";
+        document.body.appendChild(adminEnhancements);
         if (window.location.pathname === "/checkout") {
           const paymentEnhancements = document.createElement("script");
           paymentEnhancements.type = "module";
