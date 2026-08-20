@@ -18,6 +18,56 @@ const FUNCTION_MAP: Record<string, string> = {
   "get-visitor-location": "/api/get-visitor-location",
 };
 
+// O painel compilado lê orders.status num mapa fechado e faz
+// total_amount.toLocaleString(): qualquer status fora do mapa ou valor nulo
+// derruba a tela inteira. Normalizamos a resposta antes de entregar ao app.
+const ADMIN_STATUS = ["pending", "paid", "cancelled", "refunded"];
+
+function normalizeStatus(raw: unknown) {
+  const value = String(raw || "").toLowerCase();
+  if (ADMIN_STATUS.includes(value)) return value;
+  if (["pago", "approved", "aprovado", "completed", "authorized"].includes(value)) return "paid";
+  if (["canceled", "cancelado", "expired", "expirado"].includes(value)) return "cancelled";
+  if (["reembolsado", "estornado", "chargeback"].includes(value)) return "refunded";
+  return "pending";
+}
+
+async function safeOrdersResponse(response: Response) {
+  if (!(response.headers.get("content-type") || "").includes("application/json")) return response;
+  try {
+    const rows = await response.clone().json();
+    if (!Array.isArray(rows)) return response;
+    let changed = false;
+    const safe = rows.map((row) => {
+      if (!row || typeof row !== "object") return row;
+      const next = { ...row } as Record<string, unknown>;
+      if ("status" in next) {
+        const normalized = normalizeStatus(next.status);
+        if (normalized !== next.status) {
+          next.status_detalhe = next.status_detalhe ?? next.status;
+          next.status = normalized;
+          changed = true;
+        }
+      }
+      for (const field of ["total_amount", "valor"]) {
+        if (field in next && next[field] == null) {
+          next[field] = 0;
+          changed = true;
+        }
+      }
+      return next;
+    });
+    if (!changed) return response;
+    return new Response(JSON.stringify(safe), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  } catch {
+    return response;
+  }
+}
+
 function jwtRole(token: string) {
   try {
     const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
@@ -27,11 +77,42 @@ function jwtRole(token: string) {
   }
 }
 
+function reportCrash(detail: string) {
+  window.setTimeout(() => {
+    const root = document.getElementById("root");
+    if (!root || root.childElementCount > 0) return;
+    const box = document.createElement("main");
+    box.dataset.storefrontCrash = "1";
+    box.style.cssText =
+      "min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;background:#09090b;color:#fff;text-align:center;font-family:system-ui,sans-serif;";
+    const title = document.createElement("p");
+    title.style.cssText = "font-size:16px;font-weight:700;margin:0;";
+    title.textContent = "Não foi possível abrir esta página.";
+    const message = document.createElement("p");
+    message.style.cssText = "font-size:13px;color:#a1a1aa;max-width:520px;margin:0;line-height:1.5;";
+    message.textContent = detail || "Erro desconhecido";
+    const reload = document.createElement("button");
+    reload.type = "button";
+    reload.textContent = "Recarregar";
+    reload.style.cssText =
+      "height:44px;padding:0 22px;border:0;border-radius:999px;background:#fff;color:#09090b;font-weight:700;cursor:pointer;";
+    reload.addEventListener("click", () => window.location.reload());
+    box.append(title, message, reload);
+    root.appendChild(box);
+  }, 400);
+}
+
 export default function LegacyStorefront() {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (document.getElementById(APP_SCRIPT_ID)) return;
+
+    window.addEventListener("error", (event) => reportCrash(event.message));
+    window.addEventListener("unhandledrejection", (event) => {
+      const reason = event.reason as { message?: string } | string | undefined;
+      reportCrash(typeof reason === "string" ? reason : reason?.message || "");
+    });
 
     if (typeof window.crypto.randomUUID !== "function") {
       Object.defineProperty(window.crypto, "randomUUID", {
@@ -58,7 +139,7 @@ export default function LegacyStorefront() {
       const target = String(cfg.supabaseUrl || "").replace(/\/$/, "");
       const anon = String(cfg.supabaseAnonKey || "");
 
-      window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
         const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         const fn = rawUrl.match(/\/functions\/v1\/([^/?]+)/);
         if (fn?.[1] && FUNCTION_MAP[fn[1]]) {
@@ -78,7 +159,8 @@ export default function LegacyStorefront() {
               headers.set("Authorization", `Bearer ${anon}`);
             }
           }
-          return originalFetch(nextUrl, { ...init, headers });
+          const response = await originalFetch(nextUrl, { ...init, headers });
+          return nextUrl.includes("/rest/v1/orders") ? safeOrdersResponse(response) : response;
         }
 
         return originalFetch(input, init);

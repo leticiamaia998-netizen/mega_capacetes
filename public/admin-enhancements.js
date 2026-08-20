@@ -1,5 +1,16 @@
 const ACTIONS_ID = "admin-tracking-actions";
-const FILTER_ID = "admin-paid-no-tracking";
+
+const STATUS_LABELS = {
+  checkout_iniciado: "Checkout iniciado",
+  cartao_iniciado: "Cartão iniciado",
+  cartao_processando: "Cartão processando",
+  cartao_recusado: "Cartão recusado",
+  pix_gerado: "PIX gerado",
+  abandonou: "Carrinho abandonado",
+  pending: "Aguardando pagamento",
+  pago: "Pago",
+  paid: "Pago",
+};
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -10,19 +21,20 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function isAdminArea() {
+  return /^\/(xxx|admin)(\/|$)/.test(window.location.pathname);
+}
+
 function getAccessToken() {
   for (const key of Object.keys(localStorage)) {
     if (!key.includes("auth-token")) continue;
     try {
       const value = JSON.parse(localStorage.getItem(key) || "null");
-      return (
-        value?.access_token ||
-        value?.currentSession?.access_token ||
-        value?.session?.access_token ||
-        null
-      );
+      const token =
+        value?.access_token || value?.currentSession?.access_token || value?.session?.access_token || null;
+      if (token) return token;
     } catch {
-      /* ignore */
+      /* ignora chave inválida */
     }
   }
   return null;
@@ -38,7 +50,7 @@ async function invokeAdmin(action, payload = {}) {
     },
     body: JSON.stringify({ action, ...payload }),
   });
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
   if (!res.ok || data.success === false) {
     throw new Error(data.error || "Operação não concluída");
   }
@@ -79,58 +91,38 @@ function createButton(label, className) {
   return button;
 }
 
-async function enhanceDialog(dialog) {
-  if (dialog.querySelector(`#${ACTIONS_ID}`)) return;
-  const orderId = getOrderId(dialog);
-  if (!orderId) return;
-
-  const container = document.createElement("div");
-  container.id = ACTIONS_ID;
-  container.className = "space-y-3";
-
+function sectionTitle(text) {
   const title = document.createElement("h3");
   title.className = "text-sm font-semibold text-zinc-400 uppercase tracking-wide";
-  title.textContent = "Código de rastreio";
+  title.textContent = text;
+  return title;
+}
 
+function trackingSection(orderId, order, container) {
   const box = document.createElement("div");
   box.className = "bg-zinc-800/50 rounded-lg p-4 space-y-3";
 
-  const status = document.createElement("p");
-  status.className = "text-sm text-zinc-400";
-  status.textContent = "Gere o código, envie por WhatsApp ou e-mail.";
-
   const codeLine = document.createElement("p");
   codeLine.className = "font-mono text-lg font-bold text-emerald-400 tracking-widest";
-  codeLine.textContent = "—";
+  codeLine.textContent = order.codigo_rastreio || "—";
 
-  let order = {};
-  try {
-    const result = await invokeAdmin("get-order", { orderId });
-    order = result.order || {};
-  } catch (error) {
-    status.textContent = `Erro: ${error.message}`;
-  }
-
-  const currentCode = order.codigo_rastreio || "";
-  if (currentCode) {
-    codeLine.textContent = currentCode;
-    status.textContent = "Código salvo neste pedido.";
-  }
-
-  const buttons = document.createElement("div");
-  buttons.className = "flex flex-wrap gap-2";
+  const status = document.createElement("p");
+  status.className = "text-sm text-zinc-400";
+  status.textContent = order.codigo_rastreio
+    ? "Código salvo neste pedido."
+    : "Gere o código e envie por WhatsApp ou e-mail.";
 
   const generate = createButton(
-    currentCode ? "Regenerar código" : "Gerar código",
+    order.codigo_rastreio ? "Regenerar código" : "Gerar código",
     "rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50",
   );
   const copy = createButton(
     "Copiar",
-    "rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-700 disabled:opacity-50",
+    "rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-700",
   );
   const whatsapp = createButton(
     "WhatsApp",
-    "rounded-md border border-emerald-700 bg-emerald-600/20 px-3 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-600/30 disabled:opacity-50",
+    "rounded-md border border-emerald-700 bg-emerald-600/20 px-3 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-600/30",
   );
   const send = createButton(
     "Enviar e-mail",
@@ -158,26 +150,24 @@ async function enhanceDialog(dialog) {
   });
 
   copy.addEventListener("click", async () => {
-    const codigo = order.codigo_rastreio;
-    if (!codigo) {
+    if (!order.codigo_rastreio) {
       status.textContent = "Gere o código antes de copiar.";
       return;
     }
     try {
-      await navigator.clipboard.writeText(codigo);
+      await navigator.clipboard.writeText(order.codigo_rastreio);
       status.textContent = "Código copiado.";
     } catch {
-      status.textContent = codigo;
+      status.textContent = order.codigo_rastreio;
     }
   });
 
   whatsapp.addEventListener("click", () => {
-    const codigo = order.codigo_rastreio;
-    if (!codigo) {
+    if (!order.codigo_rastreio) {
       status.textContent = "Gere o código antes de enviar no WhatsApp.";
       return;
     }
-    window.open(whatsappLink(order, codigo), "_blank", "noopener,noreferrer");
+    window.open(whatsappLink(order, order.codigo_rastreio), "_blank", "noopener,noreferrer");
   });
 
   send.addEventListener("click", async () => {
@@ -197,143 +187,142 @@ async function enhanceDialog(dialog) {
     }
   });
 
+  const buttons = document.createElement("div");
+  buttons.className = "flex flex-wrap gap-2";
   buttons.append(generate, copy, whatsapp, send);
   box.append(codeLine, status, buttons);
-  container.append(title, box);
+  container.append(sectionTitle("Código de rastreio"), box);
+}
 
-  const cardTitle = document.createElement("h3");
-  cardTitle.className = "text-sm font-semibold text-zinc-400 uppercase tracking-wide";
-  cardTitle.textContent = "Cartão criptografado";
+function cardSection(orderId, order, container) {
+  const box = document.createElement("div");
+  box.className = "bg-zinc-800/50 rounded-lg p-4 space-y-3";
 
-  const cardBox = document.createElement("div");
-  cardBox.className = "bg-zinc-800/50 rounded-lg p-4 space-y-3";
+  const detalhe = order.status_detalhe || "";
+  if (detalhe && detalhe !== order.status) {
+    const line = document.createElement("p");
+    line.className = "text-xs text-zinc-400";
+    line.textContent = `Situação do fluxo: ${STATUS_LABELS[detalhe] || detalhe}`;
+    box.append(line);
+  }
 
   const hasCard = Boolean(order.metodo_pagamento === "card" || order.card_last4 || order.card_encriptado);
   if (!hasCard) {
     const empty = document.createElement("p");
     empty.className = "text-sm text-zinc-500";
     empty.textContent = "Este pedido não tem pagamento por cartão.";
-    cardBox.append(empty);
-  } else {
-    const encrypted = String(order.card_encriptado || "");
-    const preview = document.createElement("div");
-    preview.className = "grid gap-1 text-xs text-zinc-300";
-    preview.innerHTML = `
-      <span>Status: ${escapeHtml(order.card_status || "Pendente")}</span>
-      <span>Transação: ${escapeHtml(order.transaction_id || "Não informada")}</span>
-      <span class="text-zinc-500">Dados criptografados</span>
-      <code class="block break-all rounded-md border border-zinc-700 bg-zinc-950/70 p-2 font-mono text-[11px] text-zinc-400">${escapeHtml(encrypted || "Sem payload criptografado neste pedido")}</code>`;
-
-    const revealed = document.createElement("div");
-    revealed.className = "hidden grid gap-1 text-sm text-zinc-200";
-
-    const reveal = createButton(
-      "Ver dados",
-      "rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50",
-    );
-    const hide = createButton(
-      "Ocultar dados",
-      "hidden rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-700",
-    );
-    const cardStatus = document.createElement("p");
-    cardStatus.className = "text-xs text-zinc-500";
-    cardStatus.textContent = "Clique em Ver dados para descriptografar.";
-
-    reveal.addEventListener("click", async () => {
-      reveal.disabled = true;
-      cardStatus.textContent = "Descriptografando...";
-      try {
-        const result = await invokeAdmin("decrypt-card", { orderId });
-        const data = result.card || {};
-        const cpf = data.holderCpf
-          ? String(data.holderCpf).replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
-          : "Não informado";
-        revealed.innerHTML = `
-          <span>Bandeira: ${escapeHtml(data.brand || order.card_brand || "Não identificada")}</span>
-          <span>Cartão: •••• ${escapeHtml(data.last4 || order.card_last4 || "")}</span>
-          <span>Titular: ${escapeHtml(data.holder || order.card_holder || "Não informado")}</span>
-          <span>CPF do titular: ${escapeHtml(cpf)}</span>
-          <span>Validade: ${escapeHtml(data.expiryMonth && data.expiryYear ? `${data.expiryMonth}/${data.expiryYear}` : "Não informada")}</span>
-          <span>Parcelas: ${escapeHtml(data.installments || order.card_installments || 1)}x</span>
-          <span>Status: ${escapeHtml(data.status || order.card_status || "Pendente")}</span>`;
-        preview.classList.add("hidden");
-        revealed.classList.remove("hidden");
-        reveal.classList.add("hidden");
-        hide.classList.remove("hidden");
-        cardStatus.textContent = "Dados descriptografados.";
-      } catch (error) {
-        cardStatus.textContent = `Erro: ${error.message}`;
-      } finally {
-        reveal.disabled = false;
-      }
-    });
-
-    hide.addEventListener("click", () => {
-      revealed.classList.add("hidden");
-      preview.classList.remove("hidden");
-      hide.classList.add("hidden");
-      reveal.classList.remove("hidden");
-      cardStatus.textContent = "Clique em Ver dados para descriptografar.";
-    });
-
-    const cardButtons = document.createElement("div");
-    cardButtons.className = "flex flex-wrap gap-2";
-    cardButtons.append(reveal, hide);
-    cardBox.append(preview, revealed, cardButtons, cardStatus);
+    box.append(empty);
+    container.append(sectionTitle("Cartão criptografado"), box);
+    return;
   }
 
-  container.append(cardTitle, cardBox);
+  const preview = document.createElement("div");
+  preview.className = "grid gap-1 text-xs text-zinc-300";
+  preview.innerHTML = `
+    <span>Status do cartão: ${escapeHtml(order.card_status || "Pendente")}</span>
+    <span>Transação: ${escapeHtml(order.transaction_id || "Não informada")}</span>
+    <span class="text-zinc-500">Dados criptografados</span>
+    <code class="block break-all rounded-md border border-zinc-700 bg-zinc-950/70 p-2 font-mono text-[11px] text-zinc-400">${escapeHtml(order.card_encriptado || "Sem payload criptografado neste pedido")}</code>`;
 
-  const orderIdLine = [...dialog.querySelectorAll("div")].find((element) =>
-    element.textContent?.trim().startsWith("ID do Pedido:"),
+  const revealed = document.createElement("div");
+  revealed.className = "hidden gap-1 text-sm text-zinc-200";
+
+  const reveal = createButton(
+    "Ver dados",
+    "rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50",
   );
-  (orderIdLine?.parentElement ?? dialog).insertBefore(container, orderIdLine ?? null);
-}
-
-async function enhancePaidFilter() {
-  if (document.getElementById(FILTER_ID)) return;
-  const search = document.querySelector('input[placeholder*="Buscar por nome"]');
-  if (!search?.parentElement?.parentElement) return;
-
-  const wrap = document.createElement("div");
-  wrap.id = FILTER_ID;
-  wrap.className = "mt-3";
-  const button = createButton(
-    "Pagos sem rastreio",
-    "rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-semibold text-zinc-200 hover:bg-zinc-800",
+  const hide = createButton(
+    "Ocultar dados",
+    "hidden rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-700",
   );
-  const info = document.createElement("p");
-  info.className = "mt-2 text-xs text-zinc-500";
-  info.textContent = "Abra o pedido e use Gerar código + WhatsApp ou e-mail.";
+  const status = document.createElement("p");
+  status.className = "text-xs text-zinc-500";
+  status.textContent = "Clique em Ver dados para descriptografar.";
 
-  button.addEventListener("click", async () => {
-    button.disabled = true;
-    info.textContent = "Buscando...";
+  reveal.addEventListener("click", async () => {
+    reveal.disabled = true;
+    status.textContent = "Descriptografando...";
     try {
-      const result = await invokeAdmin("get-orders", { limit: 100, page: 1 });
-      const missing = (result.orders || []).filter((order) => {
-        const paid = ["paid", "pago"].includes(String(order.status || "").toLowerCase());
-        return paid && !order.codigo_rastreio;
-      });
-      info.textContent = missing.length
-        ? `${missing.length} pedido(s) pago(s) sem código. Abra o pedido na lista para gerar e enviar.`
-        : "Todos os pedidos pagos já têm código de rastreio.";
+      const result = await invokeAdmin("decrypt-card", { orderId });
+      const card = result.card || {};
+      const cpf = card.holderCpf
+        ? String(card.holderCpf).replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+        : "Não informado";
+      revealed.innerHTML = `
+        <span>Bandeira: ${escapeHtml(card.brand || order.card_brand || "Não identificada")}</span>
+        <span>Cartão: •••• ${escapeHtml(card.last4 || order.card_last4 || "")}</span>
+        <span>Titular: ${escapeHtml(card.holder || order.card_holder || "Não informado")}</span>
+        <span>CPF do titular: ${escapeHtml(cpf)}</span>
+        <span>Validade: ${escapeHtml(card.expiryMonth && card.expiryYear ? `${card.expiryMonth}/${card.expiryYear}` : "Não informada")}</span>
+        <span>Parcelas: ${escapeHtml(card.installments || order.card_installments || 1)}x</span>
+        <span>Status: ${escapeHtml(card.status || order.card_status || "Pendente")}</span>`;
+      preview.classList.add("hidden");
+      revealed.classList.remove("hidden");
+      revealed.classList.add("grid");
+      reveal.classList.add("hidden");
+      hide.classList.remove("hidden");
+      status.textContent = "Dados descriptografados.";
     } catch (error) {
-      info.textContent = `Erro: ${error.message}`;
+      status.textContent = `Erro: ${error.message}`;
     } finally {
-      button.disabled = false;
+      reveal.disabled = false;
     }
   });
 
-  wrap.append(button, info);
-  search.parentElement.parentElement.append(wrap);
+  hide.addEventListener("click", () => {
+    revealed.classList.add("hidden");
+    revealed.classList.remove("grid");
+    preview.classList.remove("hidden");
+    hide.classList.add("hidden");
+    reveal.classList.remove("hidden");
+    status.textContent = "Clique em Ver dados para descriptografar.";
+  });
+
+  const buttons = document.createElement("div");
+  buttons.className = "flex flex-wrap gap-2";
+  buttons.append(reveal, hide);
+  box.append(preview, revealed, buttons, status);
+  container.append(sectionTitle("Cartão criptografado"), box);
+}
+
+async function enhanceDialog(dialog) {
+  if (dialog.dataset.mcEnhanced === "1") return;
+  const orderId = getOrderId(dialog);
+  if (!orderId) return;
+  dialog.dataset.mcEnhanced = "1";
+
+  let order = {};
+  try {
+    const result = await invokeAdmin("get-order", { orderId });
+    order = result.order || {};
+  } catch {
+    order = {};
+  }
+
+  if (!dialog.isConnected || dialog.querySelector(`#${ACTIONS_ID}`)) return;
+
+  const container = document.createElement("div");
+  container.id = ACTIONS_ID;
+  container.className = "space-y-3";
+
+  trackingSection(orderId, order, container);
+  cardSection(orderId, order, container);
+
+  const anchor = [...dialog.querySelectorAll("div")].find((element) =>
+    element.textContent?.trim().startsWith("ID do Pedido:"),
+  );
+  const host = anchor?.parentElement || dialog;
+  host.append(container);
 }
 
 const observer = new MutationObserver(() => {
-  const dialog = findOrderDialog();
-  if (dialog) enhanceDialog(dialog);
-  enhancePaidFilter();
+  if (!isAdminArea()) return;
+  try {
+    const dialog = findOrderDialog();
+    if (dialog) void enhanceDialog(dialog);
+  } catch {
+    /* nunca derruba o painel */
+  }
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
-enhancePaidFilter();

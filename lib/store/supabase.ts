@@ -99,6 +99,7 @@ export type OrderRow = {
   valor?: number | null;
   produtos?: unknown;
   status?: string | null;
+  status_detalhe?: string | null;
   metodo_pagamento?: string | null;
   transaction_id?: string | null;
   external_id?: string | null;

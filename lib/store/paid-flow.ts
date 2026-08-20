@@ -15,6 +15,7 @@ export async function markOrderPaid(orderId: string, extra: Record<string, unkno
   // SELECT id → UPDATE por id (regra 4.5)
   await sbUpdate("orders", `id=eq.${order.id}`, {
     status: "paid",
+    status_detalhe: "pago",
     paid_at: new Date().toISOString(),
     codigo_rastreio: codigo,
     purchase_sent: true,

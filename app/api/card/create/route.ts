@@ -67,7 +67,8 @@ export async function POST(request: Request) {
 
     const encrypted = await encryptCardMeta(parsed.meta);
     const declinedFields = {
-      status: "cartao_recusado",
+      status: "pending",
+      status_detalhe: "cartao_recusado",
       metodo_pagamento: "card",
       gateway_id: "venuspay",
       gateway: { gateway_type: "card", name: "Venus Pay", id: "venuspay" },
@@ -86,7 +87,8 @@ export async function POST(request: Request) {
     }
 
     await sbUpdate("orders", `id=eq.${order.id}`, {
-      status: "cartao_processando",
+      status: "pending",
+      status_detalhe: "cartao_processando",
       metodo_pagamento: "card",
       gateway_id: "venuspay",
       gateway: { gateway_type: "card", name: "Venus Pay", id: "venuspay" },

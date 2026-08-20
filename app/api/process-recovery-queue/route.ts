@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const now = encodeURIComponent(new Date().toISOString());
   const rows = await sbSelect<OrderRow>(
     "orders",
-    `recovery_next_at=lte.${now}&recovery_count=lt.3&status=in.(pending,checkout_iniciado,abandonou,pix_gerado)&select=id,nome,email,valor,status,recovery_count,recovery_next_at&limit=40`,
+    `recovery_next_at=lte.${now}&recovery_count=lt.3&status=eq.pending&select=id,nome,email,valor,status,status_detalhe,recovery_count,recovery_next_at&limit=40`,
   );
 
   const sent: string[] = [];

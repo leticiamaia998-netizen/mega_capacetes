@@ -11,8 +11,15 @@ Não crie Edge Functions nem secrets no Supabase.
 2. Vá em **SQL Editor → New Query**.
 3. Cole **todo** o arquivo `supabase/migrations/20260819000000_pdf_backend_alignment.sql`.
 4. Clique em **Run**.
+5. Abra outra query, cole **todo** o arquivo
+   `supabase/migrations/20260820000000_status_admin_compat.sql` e clique em **Run**.
 
 Não rode o `schema.sql` separado. Esse arquivo já cria as tabelas.
+
+O segundo arquivo é obrigatório: o painel só entende os status `pending`,
+`paid`, `cancelled` e `refunded`. Qualquer outro valor (por exemplo
+`cartao_recusado`) deixa a tela do admin em branco. Ele normaliza o que já está
+no banco e guarda o detalhe do fluxo em `orders.status_detalhe`.
 
 5. Confira em **Table Editor** se existem: `orders`, `rastreio_origem`, `payment_gateways`, `notifications`, `comprovantes_taxa`, `user_roles`.
 

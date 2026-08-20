@@ -58,7 +58,8 @@ function orderInsertFromPayload(payload: CheckoutPayload, method: "pix" | "card"
     cidade: address.city,
     estado: address.state,
     metodo_pagamento: method,
-    status: method === "pix" ? "pending" : "checkout_iniciado",
+    status: "pending",
+    status_detalhe: method === "pix" ? "checkout_iniciado" : "cartao_iniciado",
     utm: payload.utm ?? {},
     tracking: payload.tracking ?? {},
     ga_client_id: payload.ga_client_id,
@@ -149,6 +150,7 @@ export async function generatePixForOrder(order: OrderRow, payload: CheckoutPayl
 
     await sbUpdate("orders", `id=eq.${order.id}`, {
       status: "pending",
+      status_detalhe: "pix_gerado",
       transaction_id: charged.externalId,
       external_id: charged.externalId,
       pix_qr_code: charged.qrCode,
