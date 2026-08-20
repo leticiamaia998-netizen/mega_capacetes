@@ -1,14 +1,23 @@
-import { env } from "cloudflare:workers";
-
 type WorkerEnv = {
   PIX_RATELIMIT?: KVNamespace;
   [key: string]: unknown;
 };
 
-const cfEnv = env as unknown as WorkerEnv;
+function workersEnv(): WorkerEnv {
+  try {
+    const processWithBuiltins = process as NodeJS.Process & {
+      getBuiltinModule?: (id: string) => { env?: WorkerEnv } | undefined;
+    };
+    const fromWorkerd = processWithBuiltins.getBuiltinModule?.("cloudflare:workers")?.env;
+    if (fromWorkerd && typeof fromWorkerd === "object") return fromWorkerd;
+  } catch {
+    // Node.js (validação do build) não resolve o módulo cloudflare:workers.
+  }
+  return {};
+}
 
 export function getEnv(name: string, fallback = ""): string {
-  const fromCf = cfEnv[name];
+  const fromCf = workersEnv()[name];
   if (typeof fromCf === "string" && fromCf.length > 0) return fromCf;
   const fromProcess = process.env[name];
   if (fromProcess && fromProcess.length > 0) return fromProcess;
@@ -16,7 +25,7 @@ export function getEnv(name: string, fallback = ""): string {
 }
 
 export function getKv(): KVNamespace | null {
-  return cfEnv.PIX_RATELIMIT ?? null;
+  return workersEnv().PIX_RATELIMIT ?? null;
 }
 
 export const STORE = {
