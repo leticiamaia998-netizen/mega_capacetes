@@ -206,6 +206,16 @@ function bindMasks(root) {
     setFieldError(root, "holderCpf", "");
   });
   holder?.addEventListener("input", () => setFieldError(root, "holderName", ""));
+
+  const selectCard = () => {
+    if (method === "card") return;
+    method = "card";
+    lastSignature = "";
+    renderCardOption();
+  };
+  for (const field of [number, expiry, cvv, cpf, holder]) {
+    field?.addEventListener("focus", selectCard);
+  }
 }
 
 function ensureStyle() {
@@ -376,12 +386,8 @@ async function chargeCard() {
   if (charging) return;
   charging = true;
   showProcessing();
-  if (!lastCheckoutState?.amount) {
-    try {
-      lastCheckoutState = JSON.parse(sessionStorage.getItem("pixPageState") || "{}") || {};
-    } catch {
-      /* segue com o que tem em memória */
-    }
+  if (!lastCheckoutState?.amount || !lastCheckoutState?.customer?.email) {
+    lastCheckoutState = captureCheckoutState();
   }
   try {
     const res = await originalFetch("/api/card/create", {
@@ -484,17 +490,15 @@ async function refillCheckout() {
 }
 
 function readInput(name) {
-  const input = document.querySelector(`input[name="${name}"]`);
-  return String(input?.value || "").trim();
+  return String(document.querySelector(`input[name="${name}"]`)?.value || "").trim();
 }
 
 function readSelect(name) {
-  const select = document.querySelector(`select[name="${name}"]`);
-  return String(select?.value || "").trim();
+  return String(document.querySelector(`select[name="${name}"]`)?.value || "").trim();
 }
 
 function parseMoney(text) {
-  const match = String(text || "").match(/([\d.,]+)/);
+  const match = String(text || "").match(/R\$\s*([\d.,]+)/);
   if (!match) return 0;
   return Number(match[1].replace(/\./g, "").replace(",", ".")) || 0;
 }
@@ -547,7 +551,7 @@ function captureCheckoutState() {
     if (matches.length) amount = parseMoney(matches[matches.length - 1][0]);
   }
 
-  const state = {
+  return {
     amount,
     customer,
     customerName: customer.name,
@@ -559,29 +563,30 @@ function captureCheckoutState() {
     totalDiscount: 0,
     shippingCost: 0,
   };
-
-  try {
-    sessionStorage.setItem("pixPageState", JSON.stringify(state));
-  } catch {
-    /* segue sem cache */
-  }
-
-  return state;
 }
 
-function blockPixNavigation() {
-  return armed || method === "card";
+function persistCheckoutState(state) {
+  lastCheckoutState = state;
+  try {
+    originalSetItem("pixPageState", JSON.stringify(state));
+  } catch {
+    /* sessionStorage indisponível */
+  }
+}
+
+function shouldBlockPixNavigation() {
+  return method === "card" && (armed || charging);
 }
 
 const originalPushState = history.pushState.bind(history);
 history.pushState = function patchedPushState(state, title, url) {
-  if (blockPixNavigation() && String(url || "").includes("/pix")) return;
+  if (shouldBlockPixNavigation() && String(url || "").includes("/pix")) return;
   return originalPushState(state, title, url);
 };
 
 const originalReplaceState = history.replaceState.bind(history);
 history.replaceState = function patchedReplaceState(state, title, url) {
-  if (blockPixNavigation() && String(url || "").includes("/pix")) return;
+  if (shouldBlockPixNavigation() && String(url || "").includes("/pix")) return;
   return originalReplaceState(state, title, url);
 };
 
@@ -612,8 +617,14 @@ sessionStorage.setItem = function patchedSetItem(key, value) {
   } catch {
     /* mantém o último estado conhecido */
   }
-  if (armed) void chargeCard();
 };
+
+function startCardPayment(card) {
+  pendingCard = card;
+  setCardMode(true);
+  persistCheckoutState(captureCheckoutState());
+  void chargeCard();
+}
 
 document.addEventListener(
   "click",
@@ -633,12 +644,10 @@ document.addEventListener(
       form?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-    pendingCard = card;
-    lastCheckoutState = captureCheckoutState();
-    setCardMode(true);
+
     event.preventDefault();
     event.stopImmediatePropagation();
-    void chargeCard();
+    startCardPayment(card);
   },
   true,
 );
