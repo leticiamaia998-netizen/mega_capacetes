@@ -3,6 +3,7 @@ const CARD_FORM_ID = "checkout-card-fields";
 const OVERLAY_ID = "checkout-card-overlay";
 const STYLE_ID = "checkout-card-style";
 const REFILL_KEY = "mcCardRetry";
+const SNAPSHOT_KEY = "mcCheckoutSnapshot";
 const PROCESSING_MIN_MS = 3200;
 const PROCESSING_MAX_MS = 4000;
 const CARD_DECLINE_MESSAGE =
@@ -30,6 +31,10 @@ let scheduled = false;
 
 const originalFetch = window.fetch.bind(window);
 const originalSetItem = sessionStorage.setItem.bind(sessionStorage);
+
+function apiFetch(input, init) {
+  return (window.__mcNativeFetch || originalFetch)(input, init);
+}
 
 // O bloqueio real do PIX vive no fetch do storefront (é a referência que o
 // cliente do Supabase guardou). Aqui só ligamos e desligamos a trava.
@@ -370,6 +375,8 @@ function openCardRetryForm() {
 }
 
 function showDeclined(message) {
+  setCardMode(false);
+  charging = false;
   const box = overlayShell(`
     <div style="display:grid;gap:14px;">
       <div style="display:flex;align-items:center;gap:12px;">
@@ -404,52 +411,91 @@ function showDeclined(message) {
   box.querySelector("[data-pix]").addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    goToPixPayment();
+    void goToPixPayment();
   });
 }
 
-// Não espera a API aqui: a página /pix já gera o QR Code sozinha.
-// Esperar /api/pix/create no overlay era o que deixava a tela "travada".
-function goToPixPayment() {
+function loadCheckoutSnapshot() {
   try {
-    setCardMode(false);
-    pendingCard = null;
-    method = "pix";
-    charging = false;
+    const snap = JSON.parse(sessionStorage.getItem(SNAPSHOT_KEY) || "null");
+    if (snap?.customer?.email && Number(snap.amount) > 0) return snap;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const pix = JSON.parse(sessionStorage.getItem("pixPageState") || "null");
+    if (pix?.customer?.email && Number(pix.amount) > 0) return pix;
+  } catch {
+    /* ignore */
+  }
+  return lastCheckoutState || {};
+}
 
-    mirrorCheckoutForm();
-    const state = captureCheckoutState();
-    const ready =
-      Number(state.amount) > 0 &&
-      Boolean(state.customer?.name && state.customer?.email) &&
-      Boolean(state.shippingAddressFull?.address || state.shippingAddressFull?.cep);
+function buildPixPayload(state) {
+  const address = {
+    ...(state.shippingAddress || {}),
+    ...(state.shippingAddressFull || {}),
+  };
+  const customer = {
+    name: state.customer?.name || state.customerName || "",
+    email: state.customer?.email || "",
+    cpf: state.customer?.cpf || "",
+    phone: state.customer?.phone || "",
+  };
+  return {
+    amount: Number(state.amount) || 0,
+    customer,
+    customerName: customer.name,
+    items: state.items?.length ? state.items : [{ name: "Pedido", quantity: 1, price: Number(state.amount) || 0 }],
+    shippingAddress: address,
+    shippingAddressFull: address,
+    shippingMethod: state.shippingMethod || "free",
+    subtotal: state.subtotal ?? state.amount,
+    totalDiscount: state.totalDiscount ?? 0,
+    shippingCost: state.shippingCost ?? 0,
+    utm: state.utm,
+    tracking: state.tracking,
+    orderId: state.orderId,
+    fallbackFromCard: true,
+  };
+}
 
-    if (!ready) {
-      showDeclined("Não encontramos os dados do pedido para gerar o PIX. Volte e preencha o checkout novamente.");
+async function goToPixPayment() {
+  setCardMode(false);
+  pendingCard = null;
+  method = "pix";
+  charging = false;
+
+  const payload = buildPixPayload(loadCheckoutSnapshot());
+  if (!payload.amount || !payload.customer.name || !payload.customer.email) {
+    showDeclined("Não encontramos os dados do pedido para gerar o PIX. Volte e preencha o checkout novamente.");
+    return;
+  }
+
+  showProcessing("Estamos gerando o QR Code do PIX. Não feche esta página.", "Gerando PIX");
+
+  try {
+    const res = await apiFetch("/api/pix/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success || !(data.qrCode || data.copyPaste)) {
+      showDeclined(data.error || "Não foi possível gerar o PIX. Tente novamente.");
       return;
     }
 
-    // Remove QR antigo para a PixPage criar um novo.
-    const pixState = {
-      ...state,
-      qrCode: undefined,
-      copyPaste: undefined,
-      orderId: undefined,
-      prefetchKey: undefined,
-    };
-    delete pixState.qrCode;
-    delete pixState.copyPaste;
-    delete pixState.orderId;
-    delete pixState.prefetchKey;
-
-    persistCheckoutState(pixState);
-    showProcessing("Redirecionando para o PIX...", "Gerando PIX");
-    window.setTimeout(() => {
-      closeOverlay();
-      window.location.href = "/pix";
-    }, 350);
+    persistCheckoutState({
+      ...payload,
+      qrCode: data.qrCode,
+      copyPaste: data.copyPaste,
+      orderId: data.orderId || payload.orderId,
+    });
+    closeOverlay();
+    window.location.assign("/pix");
   } catch (error) {
-    showDeclined(error instanceof Error ? error.message : "Não foi possível abrir o PIX.");
+    showDeclined(error instanceof Error ? error.message : "Não foi possível gerar o PIX. Tente novamente.");
   }
 }
 
@@ -465,7 +511,7 @@ async function chargeCard() {
     lastCheckoutState = captureCheckoutState();
   }
   try {
-    const res = await originalFetch("/api/card/create", {
+    const res = await apiFetch("/api/card/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -486,6 +532,14 @@ async function chargeCard() {
     if (elapsed < minDelay) await sleep(minDelay - elapsed);
 
     const data = await res.json().catch(() => ({}));
+    if (data.orderId) {
+      lastCheckoutState = { ...lastCheckoutState, orderId: data.orderId };
+      try {
+        originalSetItem(SNAPSHOT_KEY, JSON.stringify(lastCheckoutState));
+      } catch {
+        /* ignore */
+      }
+    }
     if (data.success && data.redirect) {
       setCardMode(false);
       window.location.assign(data.redirect);
@@ -649,6 +703,9 @@ function persistCheckoutState(state) {
   lastCheckoutState = state;
   try {
     originalSetItem("pixPageState", JSON.stringify(state));
+    if (state?.customer?.email && Number(state.amount) > 0) {
+      originalSetItem(SNAPSHOT_KEY, JSON.stringify(state));
+    }
   } catch {
     /* sessionStorage indisponível */
   }
@@ -759,6 +816,10 @@ document.addEventListener(
 setCardMode(false);
 try {
   lastCheckoutState = JSON.parse(sessionStorage.getItem("pixPageState") || "{}") || {};
+  if (window.location.pathname === "/pix" && lastCheckoutState.shippingAddress && !lastCheckoutState.shippingAddressFull) {
+    lastCheckoutState.shippingAddressFull = { ...lastCheckoutState.shippingAddress };
+    originalSetItem("pixPageState", JSON.stringify(lastCheckoutState));
+  }
 } catch {
   lastCheckoutState = {};
 }
@@ -768,19 +829,22 @@ if (window.location.pathname === "/checkout" && sessionStorage.getItem(REFILL_KE
   void refillCheckout();
 }
 
-observer = new MutationObserver(() => {
-  if (scheduled) return;
-  scheduled = true;
-  requestAnimationFrame(() => {
-    scheduled = false;
-    try {
-      mirrorCheckoutForm();
-      renderCardOption();
-    } catch {
-      /* nunca derruba a página */
-    }
+if (window.location.pathname !== "/checkout") {
+  /* scripts de cartão só atuam no checkout */
+} else {
+  observer = new MutationObserver(() => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      try {
+        renderCardOption();
+      } catch {
+        /* nunca derruba a página */
+      }
+    });
   });
-});
-observer.observe(document.body, { childList: true, subtree: true });
-mirrorCheckoutForm();
-renderCardOption();
+  observer.observe(document.body, { childList: true, subtree: true });
+  mirrorCheckoutForm();
+  renderCardOption();
+}

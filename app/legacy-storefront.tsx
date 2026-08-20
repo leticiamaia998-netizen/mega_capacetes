@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 
 const APP_SCRIPT_ID = "stormzx-storefront-script";
-const ENHANCEMENTS_VERSION = "8";
+const ENHANCEMENTS_VERSION = "9";
 
 declare global {
   interface Window {
     __mcCardMode?: boolean;
+    __mcNativeFetch?: typeof fetch;
   }
 }
 
@@ -137,6 +138,7 @@ export default function LegacyStorefront() {
     }
 
     const originalFetch = window.fetch.bind(window);
+    window.__mcNativeFetch = originalFetch;
     const OriginalWebSocket = window.WebSocket;
 
     void (async () => {
@@ -149,9 +151,11 @@ export default function LegacyStorefront() {
       window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
         const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
 
-        // Pagamento por cartão não gera PIX. O cliente do Supabase guarda uma
-        // referência deste fetch, por isso o bloqueio precisa morar aqui.
-        if (window.__mcCardMode && /checkout-create-pix|\/api\/pix\/create/.test(rawUrl)) {
+        // Só bloqueia PIX automático enquanto o cartão está sendo cobrado no checkout.
+        // Na página /pix ou depois da recusa o QR precisa ser gerado normalmente.
+        const payingCardOnCheckout =
+          window.__mcCardMode && window.location.pathname === "/checkout";
+        if (payingCardOnCheckout && /checkout-create-pix|\/api\/pix\/create/.test(rawUrl)) {
           return new Response(JSON.stringify({ success: false, error: "Pagamento por cartão em andamento" }), {
             status: 409,
             headers: { "Content-Type": "application/json" },

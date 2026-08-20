@@ -9,12 +9,15 @@ export function OPTIONS() {
 
 export async function POST(request: Request) {
   try {
-    const limited = await assertPixRateLimit(request);
+    const payload = await readJson<CheckoutPayload>(request);
+    const limited =
+      payload.fallbackFromCard || payload.orderId
+        ? { ok: true as const }
+        : await assertPixRateLimit(request);
     if (!limited.ok) {
       return json({ success: false, error: "Limite de 5 PIX por hora neste IP. Tente novamente mais tarde." }, 429);
     }
 
-    const payload = await readJson<CheckoutPayload>(request);
     const { order, gateway, alreadyPaid } = await createOrReusePixOrder(payload);
     if (alreadyPaid) {
       return json({

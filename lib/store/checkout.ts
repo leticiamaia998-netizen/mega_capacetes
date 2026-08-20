@@ -25,6 +25,7 @@ export type CheckoutPayload = {
   customer?: CheckoutCustomer;
   items?: Array<{ name?: string; quantity?: number; price?: number }>;
   shippingAddress?: CheckoutAddress;
+  shippingAddressFull?: CheckoutAddress;
   utm?: Record<string, unknown>;
   tracking?: Record<string, unknown>;
   subtotal?: number;
@@ -33,11 +34,16 @@ export type CheckoutPayload = {
   shippingMethod?: string;
   ga_client_id?: string;
   orderId?: string;
+  fallbackFromCard?: boolean;
 };
+
+function mergedAddress(payload: CheckoutPayload): CheckoutAddress {
+  return { ...(payload.shippingAddress || {}), ...(payload.shippingAddressFull || {}) };
+}
 
 function orderInsertFromPayload(payload: CheckoutPayload, method: "pix" | "card", gatewayId: string, gatewayName: string) {
   const customer = payload.customer || {};
-  const address = payload.shippingAddress || {};
+  const address = mergedAddress(payload);
   const amount = Number(payload.amount || 0);
   return {
     nome: customer.name,
@@ -94,9 +100,7 @@ export async function createOrReusePixOrder(payload: CheckoutPayload) {
       if (isPaidStatus(existing[0].status)) {
         return { order: existing[0], gateway, alreadyPaid: true as const };
       }
-      if (existing[0].pix_copy_paste || existing[0].pix_qr_code) {
-        return { order: existing[0], gateway, reused: true as const };
-      }
+      return { order: existing[0], gateway, reused: true as const };
     }
   }
 
