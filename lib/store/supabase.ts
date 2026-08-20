@@ -28,6 +28,28 @@ async function parse<T>(res: Response): Promise<T> {
   }
 }
 
+function missingColumn(message: string) {
+  return message.match(/Could not find the '([^']+)' column/i)?.[1] || null;
+}
+
+async function withUnknownColumnRetry<T>(
+  row: Record<string, unknown>,
+  send: (next: Record<string, unknown>) => Promise<T>,
+): Promise<T> {
+  let current = { ...row };
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      return await send(current);
+    } catch (error) {
+      const column = missingColumn(error instanceof Error ? error.message : String(error));
+      if (!column || !(column in current)) throw error;
+      const { [column]: _dropped, ...rest } = current;
+      current = rest;
+    }
+  }
+  return send(current);
+}
+
 export async function sbSelect<T = Record<string, unknown>>(
   table: string,
   query: string,
@@ -43,15 +65,17 @@ export async function sbInsert<T = Record<string, unknown>>(
   table: string,
   row: Record<string, unknown>,
 ): Promise<T> {
-  const { url, headers } = restHeaders();
-  const res = await fetch(`${url}/rest/v1/${table}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(row),
+  return withUnknownColumnRetry(row, async (next) => {
+    const { url, headers } = restHeaders();
+    const res = await fetch(`${url}/rest/v1/${table}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(next),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await parse<T[] | T>(res);
+    return Array.isArray(data) ? data[0] : data;
   });
-  if (!res.ok) throw new Error(await res.text());
-  const data = await parse<T[] | T>(res);
-  return Array.isArray(data) ? data[0] : data;
 }
 
 export async function sbUpdate<T = Record<string, unknown>>(
@@ -59,15 +83,17 @@ export async function sbUpdate<T = Record<string, unknown>>(
   query: string,
   row: Record<string, unknown>,
 ): Promise<T[]> {
-  const { url, headers } = restHeaders();
-  const res = await fetch(`${url}/rest/v1/${table}?${query}`, {
-    method: "PATCH",
-    headers,
-    body: JSON.stringify(row),
+  return withUnknownColumnRetry(row, async (next) => {
+    const { url, headers } = restHeaders();
+    const res = await fetch(`${url}/rest/v1/${table}?${query}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(next),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await parse<T[] | T>(res);
+    return Array.isArray(data) ? data : [data];
   });
-  if (!res.ok) throw new Error(await res.text());
-  const data = await parse<T[] | T>(res);
-  return Array.isArray(data) ? data : [data];
 }
 
 export async function sbUpsert<T = Record<string, unknown>>(
@@ -75,17 +101,19 @@ export async function sbUpsert<T = Record<string, unknown>>(
   row: Record<string, unknown>,
   onConflict: string,
 ): Promise<T> {
-  const { url, headers } = restHeaders({
-    Prefer: "return=representation,resolution=merge-duplicates",
+  return withUnknownColumnRetry(row, async (next) => {
+    const { url, headers } = restHeaders({
+      Prefer: "return=representation,resolution=merge-duplicates",
+    });
+    const res = await fetch(`${url}/rest/v1/${table}?on_conflict=${onConflict}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(next),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await parse<T[] | T>(res);
+    return Array.isArray(data) ? data[0] : data;
   });
-  const res = await fetch(`${url}/rest/v1/${table}?on_conflict=${onConflict}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(row),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const data = await parse<T[] | T>(res);
-  return Array.isArray(data) ? data[0] : data;
 }
 
 export type OrderRow = {

@@ -3,6 +3,20 @@ import { assertPixRateLimit } from "@/lib/store/ratelimit";
 import { createOrReusePixOrder, generatePixForOrder, type CheckoutPayload } from "@/lib/store/checkout";
 import { gatewayCode } from "@/lib/store/gateways";
 
+function publicPixError(error: unknown) {
+  const raw = error instanceof Error ? error.message : "Erro ao gerar PIX";
+  try {
+    const parsed = JSON.parse(raw) as { message?: string };
+    if (parsed?.message) return publicPixError(new Error(parsed.message));
+  } catch {
+    /* texto comum */
+  }
+  if (/PGRST|schema cache|Could not find the/i.test(raw)) {
+    return "Não foi possível gerar o PIX agora. Tente novamente.";
+  }
+  return raw || "Erro ao gerar PIX";
+}
+
 export function OPTIONS() {
   return options();
 }
@@ -42,9 +56,6 @@ export async function POST(request: Request) {
       gatewayName: gatewayCode(gateway),
     });
   } catch (error) {
-    return json(
-      { success: false, error: error instanceof Error ? error.message : "Erro ao gerar PIX" },
-      500,
-    );
+    return json({ success: false, error: publicPixError(error) }, 500);
   }
 }
