@@ -1,7 +1,7 @@
 # MegaCapacetes — Passo a passo
 
 Arquitetura: **Supabase = só tabelas**. **Cloudflare = site + `/api/*`**.  
-Não crie Edge Functions nem secrets no Supabase.
+Não crie Edge Functions nem secrets no Supabase. As rotas de PIX, cartão e admin estão em `app/api/`.
 
 ---
 
@@ -14,7 +14,7 @@ Não crie Edge Functions nem secrets no Supabase.
 5. Abra outra query, cole **todo** o arquivo
    `supabase/migrations/20260820000000_status_admin_compat.sql` e clique em **Run**.
 
-Não rode o `schema.sql` separado. Esse arquivo já cria as tabelas.
+Não rode outro SQL além desses dois arquivos. O alinhamento já cria as tabelas.
 
 O segundo arquivo é obrigatório: o painel só entende os status `pending`,
 `paid`, `cancelled` e `refunded`. Qualquer outro valor (por exemplo
