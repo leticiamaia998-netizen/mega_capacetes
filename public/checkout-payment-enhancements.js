@@ -4,6 +4,8 @@ const CARD_FORM_ID = "checkout-card-fields";
 let cardEnabled = false;
 let method = "pix";
 let intercepting = false;
+let lastSignature = "";
+let observer = null;
 
 async function loadGateways() {
   try {
@@ -16,10 +18,13 @@ async function loadGateways() {
   renderCardOption();
 }
 
-function findPixLabel() {
-  return [...document.querySelectorAll("label, button, div")].find((el) =>
-    el.childElementCount < 8 && el.textContent?.includes("PIX") && el.textContent.length < 80,
-  );
+function attachPayButtons(card) {
+  card.querySelectorAll("[data-pay]").forEach((button) => {
+    button.addEventListener("click", () => {
+      method = button.getAttribute("data-pay") === "card" ? "card" : "pix";
+      renderCardOption();
+    });
+  });
 }
 
 function renderCardOption() {
@@ -28,7 +33,14 @@ function renderCardOption() {
   );
   if (!pixLabel?.parentElement) return;
 
-  let card = document.getElementById(CARD_OPTION_ID);
+  const signature = `${cardEnabled}:${method}`;
+  const existing = document.getElementById(CARD_OPTION_ID);
+  if (existing && lastSignature === signature) return;
+
+  observer?.disconnect();
+  lastSignature = signature;
+
+  let card = existing;
   if (!card) {
     card = document.createElement("div");
     card.id = CARD_OPTION_ID;
@@ -70,12 +82,8 @@ function renderCardOption() {
         <span class="rounded-full bg-neutral-200 px-2 py-1 text-[10px] font-semibold text-neutral-600">Indisponível</span>
       </div>`;
 
-  card.querySelectorAll("[data-pay]").forEach((button) => {
-    button.addEventListener("click", () => {
-      method = button.getAttribute("data-pay") === "card" ? "card" : "pix";
-      renderCardOption();
-    });
-  });
+  attachPayButtons(card);
+  observer?.observe(document.body, { childList: true, subtree: true });
 }
 
 function cardFields() {
@@ -144,7 +152,6 @@ history.pushState = function patchedPushState(state, title, url) {
   return originalPushState(state, title, url);
 };
 
-const observer = new MutationObserver(() => renderCardOption());
+observer = new MutationObserver(() => renderCardOption());
 observer.observe(document.body, { childList: true, subtree: true });
 loadGateways();
-findPixLabel();
