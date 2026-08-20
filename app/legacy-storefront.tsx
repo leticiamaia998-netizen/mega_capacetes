@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 const APP_SCRIPT_ID = "stormzx-storefront-script";
-const ENHANCEMENTS_VERSION = "9";
+const ENHANCEMENTS_VERSION = "10";
 
 declare global {
   interface Window {
@@ -73,6 +73,64 @@ async function safeOrdersResponse(response: Response) {
     });
   } catch {
     return response;
+  }
+}
+
+function readCheckoutSnapshot() {
+  try {
+    const snap = JSON.parse(sessionStorage.getItem("mcCheckoutSnapshot") || "null");
+    if (snap && typeof snap === "object") return snap as Record<string, unknown>;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const pix = JSON.parse(sessionStorage.getItem("pixPageState") || "null");
+    if (pix && typeof pix === "object") return pix as Record<string, unknown>;
+  } catch {
+    /* ignore */
+  }
+  return {};
+}
+
+function asRecord(value: unknown) {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function enrichPixCreateInit(init?: RequestInit): RequestInit | undefined {
+  if (!init?.body || typeof init.body !== "string") return init;
+  try {
+    const parsed = JSON.parse(init.body) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object") return init;
+    const snap = readCheckoutSnapshot();
+    const customer = { ...asRecord(snap.customer), ...asRecord(parsed.customer) };
+    const address = {
+      ...asRecord(snap.shippingAddress),
+      ...asRecord(snap.shippingAddressFull),
+      ...asRecord(parsed.shippingAddress),
+      ...asRecord(parsed.shippingAddressFull),
+    };
+    const amount = Number(parsed.amount || snap.amount || 0);
+    const parsedItems = Array.isArray(parsed.items) ? parsed.items : [];
+    const snapItems = Array.isArray(snap.items) ? snap.items : [];
+    const items = parsedItems.length ? parsedItems : snapItems.length ? snapItems : [{ name: "Pedido", quantity: 1, price: amount }];
+    return {
+      ...init,
+      body: JSON.stringify({
+        ...parsed,
+        amount,
+        customer,
+        customerName: customer.name,
+        items,
+        shippingAddress: address,
+        shippingAddressFull: address,
+        orderId: parsed.orderId || snap.orderId,
+        fallbackFromCard: Boolean(parsed.fallbackFromCard || snap.orderId),
+      }),
+    };
+  } catch {
+    return init;
   }
 }
 
@@ -155,16 +213,22 @@ export default function LegacyStorefront() {
         // Na página /pix ou depois da recusa o QR precisa ser gerado normalmente.
         const payingCardOnCheckout =
           window.__mcCardMode && window.location.pathname === "/checkout";
-        if (payingCardOnCheckout && /checkout-create-pix|\/api\/pix\/create/.test(rawUrl)) {
+        const isPixCreate = /checkout-create-pix|\/api\/pix\/create/.test(rawUrl);
+        if (payingCardOnCheckout && isPixCreate) {
           return new Response(JSON.stringify({ success: false, error: "Pagamento por cartão em andamento" }), {
             status: 409,
             headers: { "Content-Type": "application/json" },
           });
         }
 
+        let pixInit = init;
+        if (isPixCreate && !payingCardOnCheckout) {
+          pixInit = enrichPixCreateInit(init);
+        }
+
         const fn = rawUrl.match(/\/functions\/v1\/([^/?]+)/);
         if (fn?.[1] && FUNCTION_MAP[fn[1]]) {
-          return originalFetch(FUNCTION_MAP[fn[1]], init);
+          return originalFetch(FUNCTION_MAP[fn[1]], pixInit);
         }
 
         if (target && rawUrl.includes(".supabase.co")) {
@@ -184,7 +248,7 @@ export default function LegacyStorefront() {
           return nextUrl.includes("/rest/v1/orders") ? safeOrdersResponse(response) : response;
         }
 
-        return originalFetch(input, init);
+        return originalFetch(input, pixInit);
       };
 
       window.WebSocket = function PatchedWebSocket(url: string | URL, protocols?: string | string[]) {

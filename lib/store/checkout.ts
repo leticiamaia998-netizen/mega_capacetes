@@ -1,6 +1,6 @@
 import { activePixGateway, credentialsFor, gatewayCode } from "./gateways";
 import { notifyAdmin } from "./emails";
-import { createPixCharge } from "./pix";
+import { createPixCharge, ensurePixDisplay } from "./pix";
 import { isPaidStatus, sbInsert, sbSelect, sbUpdate, type OrderRow } from "./supabase";
 
 export type CheckoutCustomer = {
@@ -130,27 +130,35 @@ export async function generatePixForOrder(order: OrderRow, payload: CheckoutPayl
     return { alreadyPaid: true, qrCode: "", copyPaste: "", externalId: order.transaction_id || order.id, order };
   }
   if (order.pix_copy_paste || order.pix_qr_code) {
-    return {
-      alreadyPaid: false,
+    const existing = ensurePixDisplay({
       qrCode: order.pix_qr_code || "",
       copyPaste: order.pix_copy_paste || "",
       externalId: order.external_id || order.transaction_id || order.id,
+      raw: {},
+    });
+    return {
+      alreadyPaid: false,
+      qrCode: existing.qrCode,
+      copyPaste: existing.copyPaste,
+      externalId: existing.externalId,
       order,
     };
   }
 
   try {
-    const charged = await createPixCharge(code, {
-      amount: Number(order.valor || payload.amount || 0),
-      orderId: order.id,
-      customer: {
-        name: String(payload.customer?.name || order.nome || ""),
-        email: String(payload.customer?.email || order.email || ""),
-        cpf: payload.customer?.cpf || order.cpf || "",
-        phone: payload.customer?.phone || order.telefone || "",
-      },
-      items: payload.items || (Array.isArray(order.produtos) ? order.produtos : undefined),
-    });
+    const charged = ensurePixDisplay(
+      await createPixCharge(code, {
+        amount: Number(order.valor || payload.amount || 0),
+        orderId: order.id,
+        customer: {
+          name: String(payload.customer?.name || order.nome || ""),
+          email: String(payload.customer?.email || order.email || ""),
+          cpf: payload.customer?.cpf || order.cpf || "",
+          phone: payload.customer?.phone || order.telefone || "",
+        },
+        items: payload.items || (Array.isArray(order.produtos) ? order.produtos : undefined),
+      }),
+    );
 
     await sbUpdate("orders", `id=eq.${order.id}`, {
       status: "pending",

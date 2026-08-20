@@ -431,6 +431,16 @@ function loadCheckoutSnapshot() {
   return lastCheckoutState || {};
 }
 
+function pixQrImage(copyPaste, qrCode) {
+  const copy = String(copyPaste || "").trim();
+  const image = String(qrCode || "").trim();
+  if (image && (image.startsWith("http") || image.startsWith("data:") || !/^(000201|01\d{2})/.test(image))) {
+    return image.startsWith("http") || image.startsWith("data:") ? image : `data:image/png;base64,${image}`;
+  }
+  if (!copy) return "";
+  return `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(copy)}`;
+}
+
 function buildPixPayload(state) {
   const address = {
     ...(state.shippingAddress || {}),
@@ -439,18 +449,19 @@ function buildPixPayload(state) {
   const customer = {
     name: state.customer?.name || state.customerName || "",
     email: state.customer?.email || "",
-    cpf: state.customer?.cpf || "",
+    cpf: state.customer?.cpf || pendingCard?.holderCpf || "",
     phone: state.customer?.phone || "",
   };
+  const amount = Number(state.amount) || 0;
   return {
-    amount: Number(state.amount) || 0,
+    amount,
     customer,
     customerName: customer.name,
-    items: state.items?.length ? state.items : [{ name: "Pedido", quantity: 1, price: Number(state.amount) || 0 }],
+    items: state.items?.length ? state.items : [{ name: "Pedido", quantity: 1, price: amount }],
     shippingAddress: address,
     shippingAddressFull: address,
     shippingMethod: state.shippingMethod || "free",
-    subtotal: state.subtotal ?? state.amount,
+    subtotal: state.subtotal ?? amount,
     totalDiscount: state.totalDiscount ?? 0,
     shippingCost: state.shippingCost ?? 0,
     utm: state.utm,
@@ -462,11 +473,11 @@ function buildPixPayload(state) {
 
 async function goToPixPayment() {
   setCardMode(false);
-  pendingCard = null;
   method = "pix";
   charging = false;
 
   const payload = buildPixPayload(loadCheckoutSnapshot());
+  pendingCard = null;
   if (!payload.amount || !payload.customer.name || !payload.customer.email) {
     showDeclined("Não encontramos os dados do pedido para gerar o PIX. Volte e preencha o checkout novamente.");
     return;
@@ -481,16 +492,20 @@ async function goToPixPayment() {
       body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.success || !(data.qrCode || data.copyPaste)) {
+    const copyPaste = String(data.copyPaste || "").trim();
+    const qrCode = pixQrImage(copyPaste, data.qrCode);
+    const orderId = data.orderId || payload.orderId;
+    if (!res.ok || !data.success || !copyPaste || !qrCode || !orderId) {
       showDeclined(data.error || "Não foi possível gerar o PIX. Tente novamente.");
       return;
     }
 
     persistCheckoutState({
       ...payload,
-      qrCode: data.qrCode,
-      copyPaste: data.copyPaste,
-      orderId: data.orderId || payload.orderId,
+      qrCode,
+      copyPaste,
+      orderId,
+      prefetchKey: orderId,
     });
     closeOverlay();
     window.location.assign("/pix");
@@ -533,12 +548,7 @@ async function chargeCard() {
 
     const data = await res.json().catch(() => ({}));
     if (data.orderId) {
-      lastCheckoutState = { ...lastCheckoutState, orderId: data.orderId };
-      try {
-        originalSetItem(SNAPSHOT_KEY, JSON.stringify(lastCheckoutState));
-      } catch {
-        /* ignore */
-      }
+      persistCheckoutState({ ...lastCheckoutState, orderId: data.orderId });
     }
     if (data.success && data.redirect) {
       setCardMode(false);
@@ -816,12 +826,32 @@ document.addEventListener(
 setCardMode(false);
 try {
   lastCheckoutState = JSON.parse(sessionStorage.getItem("pixPageState") || "{}") || {};
-  if (window.location.pathname === "/pix" && lastCheckoutState.shippingAddress && !lastCheckoutState.shippingAddressFull) {
+  const snap = JSON.parse(sessionStorage.getItem(SNAPSHOT_KEY) || "null");
+  if (snap?.qrCode && snap?.copyPaste && snap?.orderId) {
+    lastCheckoutState = { ...lastCheckoutState, ...snap };
+    originalSetItem("pixPageState", JSON.stringify(lastCheckoutState));
+    sessionStorage.removeItem("mcPixRecovered");
+  } else if (window.location.pathname === "/pix" && lastCheckoutState.shippingAddress && !lastCheckoutState.shippingAddressFull) {
     lastCheckoutState.shippingAddressFull = { ...lastCheckoutState.shippingAddress };
     originalSetItem("pixPageState", JSON.stringify(lastCheckoutState));
   }
 } catch {
   lastCheckoutState = {};
+}
+
+if (window.location.pathname === "/pix") {
+  const startedAt = Date.now();
+  const timer = window.setInterval(() => {
+    const failed = (document.body.textContent || "").includes("Erro ao gerar o PIX");
+    if (failed) {
+      window.clearInterval(timer);
+      if (sessionStorage.getItem("mcPixRecovered") === "1") return;
+      sessionStorage.setItem("mcPixRecovered", "1");
+      void goToPixPayment();
+      return;
+    }
+    if (Date.now() - startedAt > 10000) window.clearInterval(timer);
+  }, 400);
 }
 
 if (window.location.pathname === "/checkout" && sessionStorage.getItem(REFILL_KEY) === "1") {

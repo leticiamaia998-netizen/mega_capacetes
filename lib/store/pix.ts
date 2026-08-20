@@ -64,7 +64,18 @@ export function extractPix(raw: Record<string, unknown>, fallbackId: string): Pi
       fallbackId,
   );
 
-  return { qrCode, copyPaste, externalId, raw };
+  return ensurePixDisplay({ qrCode, copyPaste, externalId, raw });
+}
+
+export function ensurePixDisplay(result: PixChargeResult): PixChargeResult {
+  let qrCode = String(result.qrCode || "").trim();
+  let copyPaste = String(result.copyPaste || "").trim();
+  const emv = [copyPaste, qrCode].find((value) => /^(000201|01\d{2})/.test(value));
+  if (emv) copyPaste = emv;
+  if (copyPaste && (!qrCode || /^(000201|01\d{2})/.test(qrCode))) {
+    qrCode = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(copyPaste)}`;
+  }
+  return { ...result, qrCode, copyPaste };
 }
 
 async function postJson(url: string, headers: Record<string, string>, body: unknown) {
