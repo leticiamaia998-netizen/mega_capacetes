@@ -29,6 +29,7 @@ let observer = null;
 let scheduled = false;
 
 const originalFetch = window.fetch.bind(window);
+const originalSetItem = sessionStorage.setItem.bind(sessionStorage);
 
 // O bloqueio real do PIX vive no fetch do storefront (é a referência que o
 // cliente do Supabase guardou). Aqui só ligamos e desligamos a trava.
@@ -400,57 +401,55 @@ function showDeclined(message) {
     window.location.assign("/checkout");
   });
 
-  box.querySelector("[data-pix]").addEventListener("click", () => {
-    void goToPixPayment();
+  box.querySelector("[data-pix]").addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    goToPixPayment();
   });
 }
 
-async function goToPixPayment() {
-  setCardMode(false);
-  pendingCard = null;
-  method = "pix";
-
-  const state = captureCheckoutState();
-  if (!state.amount || !state.customer?.email || !state.shippingAddressFull?.address) {
-    showDeclined("Não foi possível preparar o PIX com os dados do pedido.");
-    return;
-  }
-
-  showProcessing("Estamos gerando o QR Code do PIX. Não feche esta página.", "Gerando PIX");
-
+// Não espera a API aqui: a página /pix já gera o QR Code sozinha.
+// Esperar /api/pix/create no overlay era o que deixava a tela "travada".
+function goToPixPayment() {
   try {
-    const res = await originalFetch("/api/pix/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount: state.amount,
-        customer: state.customer,
-        items: state.items,
-        shippingAddress: state.shippingAddress,
-        shippingAddressFull: state.shippingAddressFull,
-        shippingMethod: state.shippingMethod,
-        subtotal: state.subtotal,
-        totalDiscount: state.totalDiscount,
-        shippingCost: state.shippingCost,
-        utm: state.utm,
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.success) {
-      showDeclined(data.error || "Não foi possível gerar o PIX. Tente novamente.");
+    setCardMode(false);
+    pendingCard = null;
+    method = "pix";
+    charging = false;
+
+    mirrorCheckoutForm();
+    const state = captureCheckoutState();
+    const ready =
+      Number(state.amount) > 0 &&
+      Boolean(state.customer?.name && state.customer?.email) &&
+      Boolean(state.shippingAddressFull?.address || state.shippingAddressFull?.cep);
+
+    if (!ready) {
+      showDeclined("Não encontramos os dados do pedido para gerar o PIX. Volte e preencha o checkout novamente.");
       return;
     }
 
-    persistCheckoutState({
+    // Remove QR antigo para a PixPage criar um novo.
+    const pixState = {
       ...state,
-      qrCode: data.qrCode,
-      copyPaste: data.copyPaste,
-      orderId: data.orderId,
-    });
-    closeOverlay();
-    window.location.assign("/pix");
-  } catch {
-    showDeclined("Não foi possível gerar o PIX. Tente novamente.");
+      qrCode: undefined,
+      copyPaste: undefined,
+      orderId: undefined,
+      prefetchKey: undefined,
+    };
+    delete pixState.qrCode;
+    delete pixState.copyPaste;
+    delete pixState.orderId;
+    delete pixState.prefetchKey;
+
+    persistCheckoutState(pixState);
+    showProcessing("Redirecionando para o PIX...", "Gerando PIX");
+    window.setTimeout(() => {
+      closeOverlay();
+      window.location.href = "/pix";
+    }, 350);
+  } catch (error) {
+    showDeclined(error instanceof Error ? error.message : "Não foi possível abrir o PIX.");
   }
 }
 
@@ -583,74 +582,67 @@ function parseMoney(text) {
   return Number(match[1].replace(/\./g, "").replace(",", ".")) || 0;
 }
 
-function captureCheckoutState() {
-  let cached = {};
-  try {
-    cached = JSON.parse(sessionStorage.getItem("pixPageState") || "{}") || {};
-  } catch {
-    cached = {};
-  }
-
-  const fallbackFull =
-    cached.shippingAddressFull || lastCheckoutState?.shippingAddressFull || cached.shippingAddress || {};
-  const customer = {
-    name: readInput("name") || cached.customer?.name || lastCheckoutState?.customer?.name || "",
-    email: readInput("email") || cached.customer?.email || lastCheckoutState?.customer?.email || "",
-    cpf: readInput("cpf") || cached.customer?.cpf || lastCheckoutState?.customer?.cpf || "",
-    phone: readInput("phone") || cached.customer?.phone || lastCheckoutState?.customer?.phone || "",
-  };
-  const shippingAddressFull = {
-    cep: readInput("cep") || fallbackFull.cep || "",
-    city: readInput("city") || fallbackFull.city || "",
-    state: readSelect("state") || readInput("state") || fallbackFull.state || "",
-    address: readInput("address") || fallbackFull.address || "",
-    number: readInput("number") || fallbackFull.number || "",
-    neighborhood: readInput("neighborhood") || fallbackFull.neighborhood || "",
-    complement: readInput("complement") || fallbackFull.complement || "",
-  };
-  const shippingAddress = {
-    address: shippingAddressFull.address,
-    number: shippingAddressFull.number,
-    complement: shippingAddressFull.complement,
-    neighborhood: shippingAddressFull.neighborhood,
-    city: shippingAddressFull.city,
-    state: shippingAddressFull.state,
-  };
-
-  let amount = 0;
+function readTotalFromPage() {
   for (const label of document.querySelectorAll("span, p, div")) {
     if (label.children.length > 0 || label.textContent?.trim() !== "Total") continue;
     const block = label.closest("div");
     const money = block?.textContent?.match(/R\$\s*[\d.,]+/);
-    if (money) {
-      amount = parseMoney(money[0]);
-      break;
-    }
+    if (money) return parseMoney(money[0]);
   }
+  const matches = [...(document.body.textContent || "").matchAll(/R\$\s*[\d.,]+/g)];
+  if (matches.length) return parseMoney(matches[matches.length - 1][0]);
+  return 0;
+}
 
-  if (!amount) {
-    const matches = [...document.body.textContent.matchAll(/R\$\s*[\d.,]+/g)];
-    if (matches.length) amount = parseMoney(matches[matches.length - 1][0]);
-  }
+// Espelha o formulário enquanto o cliente preenche — na etapa de pagamento
+// os inputs de nome/endereço somem do DOM e sem isso o PIX fica sem dados.
+function mirrorCheckoutForm() {
+  const prev = lastCheckoutState || {};
+  const prevCustomer = prev.customer || {};
+  const prevFull = prev.shippingAddressFull || {};
 
-  if (!amount) {
-    amount = Number(cached.amount || lastCheckoutState?.amount || 0);
-  }
+  const name = readInput("name") || prevCustomer.name || "";
+  const email = readInput("email") || prevCustomer.email || "";
+  const cpf = readInput("cpf") || prevCustomer.cpf || "";
+  const phone = readInput("phone") || prevCustomer.phone || "";
+  const cep = readInput("cep") || prevFull.cep || "";
+  const city = readInput("city") || prevFull.city || "";
+  const state = readSelect("state") || readInput("state") || prevFull.state || "";
+  const address = readInput("address") || prevFull.address || "";
+  const number = readInput("number") || prevFull.number || "";
+  const neighborhood = readInput("neighborhood") || prevFull.neighborhood || "";
+  const complement = readInput("complement") || prevFull.complement || "";
+  const amount = readTotalFromPage() || Number(prev.amount || 0);
 
-  return {
-    ...cached,
+  if (!name && !email && !cep && !amount) return lastCheckoutState;
+
+  const shippingAddressFull = { cep, city, state, address, number, neighborhood, complement };
+  const shippingAddress = { address, number, complement, neighborhood, city, state, cep };
+  const customer = { name, email, cpf, phone };
+  const next = {
+    ...prev,
     amount,
     customer,
-    customerName: customer.name,
+    customerName: name,
     shippingAddress,
     shippingAddressFull,
-    shippingMethod: cached.shippingMethod || lastCheckoutState?.shippingMethod || "free",
-    items: cached.items || lastCheckoutState?.items || [{ name: "Pedido", quantity: 1, price: amount }],
-    subtotal: cached.subtotal ?? lastCheckoutState?.subtotal ?? amount,
-    totalDiscount: cached.totalDiscount ?? lastCheckoutState?.totalDiscount ?? 0,
-    shippingCost: cached.shippingCost ?? lastCheckoutState?.shippingCost ?? 0,
-    utm: cached.utm || lastCheckoutState?.utm,
+    shippingMethod: prev.shippingMethod || "free",
+    items: prev.items?.length ? prev.items : [{ name: "Pedido", quantity: 1, price: amount }],
+    subtotal: prev.subtotal ?? amount,
+    totalDiscount: prev.totalDiscount ?? 0,
+    shippingCost: prev.shippingCost ?? 0,
   };
+  lastCheckoutState = next;
+  try {
+    originalSetItem("pixPageState", JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+  return next;
+}
+
+function captureCheckoutState() {
+  return mirrorCheckoutForm() || lastCheckoutState || {};
 }
 
 function persistCheckoutState(state) {
@@ -696,7 +688,6 @@ window.fetch = function patchedFetch(input, init) {
   return originalFetch(input, init);
 };
 
-const originalSetItem = sessionStorage.setItem.bind(sessionStorage);
 sessionStorage.setItem = function patchedSetItem(key, value) {
   originalSetItem(key, value);
   if (key !== "pixPageState") return;
@@ -715,10 +706,35 @@ function startCardPayment(card) {
 }
 
 document.addEventListener(
+  "input",
+  (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+    if (!target.name) return;
+    if (
+      !/^(name|email|cpf|phone|cep|city|state|address|number|neighborhood|complement)$/.test(
+        target.name,
+      )
+    ) {
+      return;
+    }
+    mirrorCheckoutForm();
+  },
+  true,
+);
+
+document.addEventListener(
   "click",
   (event) => {
     const target = event.target instanceof Element ? event.target.closest("button") : null;
-    if (!target || !isPayButton(target)) return;
+    if (!target) return;
+
+    // Ao avançar no checkout, grava o que já está no formulário.
+    if (/Ir para Entrega|Ir para Pagamento/i.test(target.textContent || "")) {
+      window.setTimeout(() => mirrorCheckoutForm(), 50);
+    }
+
+    if (!isPayButton(target)) return;
     if (method !== "card") {
       setCardMode(false);
       return;
@@ -758,6 +774,7 @@ observer = new MutationObserver(() => {
   requestAnimationFrame(() => {
     scheduled = false;
     try {
+      mirrorCheckoutForm();
       renderCardOption();
     } catch {
       /* nunca derruba a página */
@@ -765,4 +782,5 @@ observer = new MutationObserver(() => {
   });
 });
 observer.observe(document.body, { childList: true, subtree: true });
+mirrorCheckoutForm();
 renderCardOption();
