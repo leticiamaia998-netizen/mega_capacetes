@@ -3,6 +3,13 @@
 import { useEffect, useState } from "react";
 
 const APP_SCRIPT_ID = "stormzx-storefront-script";
+const ENHANCEMENTS_VERSION = "3";
+
+declare global {
+  interface Window {
+    __mcCardMode?: boolean;
+  }
+}
 
 const FUNCTION_MAP: Record<string, string> = {
   "checkout-create-pix": "/api/pix/create",
@@ -141,6 +148,16 @@ export default function LegacyStorefront() {
 
       window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
         const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+
+        // Pagamento por cartão não gera PIX. O cliente do Supabase guarda uma
+        // referência deste fetch, por isso o bloqueio precisa morar aqui.
+        if (window.__mcCardMode && /checkout-create-pix|\/api\/pix\/create/.test(rawUrl)) {
+          return new Response(JSON.stringify({ success: false, error: "Pagamento por cartão em andamento" }), {
+            status: 409,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         const fn = rawUrl.match(/\/functions\/v1\/([^/?]+)/);
         if (fn?.[1] && FUNCTION_MAP[fn[1]]) {
           return originalFetch(FUNCTION_MAP[fn[1]], init);
@@ -183,22 +200,14 @@ export default function LegacyStorefront() {
       script.type = "module";
       script.src = "/assets/index-D36WQRm9.js";
       script.addEventListener("error", () => setFailed(true), { once: true });
+      // Os dois scripts se guardam por rota. Carregar sempre é o que faz eles
+      // funcionarem quando o cliente chega no checkout navegando pela loja.
       script.addEventListener("load", () => {
-        const adminEnhancements = document.createElement("script");
-        adminEnhancements.type = "module";
-        adminEnhancements.src = "/admin-enhancements.js";
-        document.body.appendChild(adminEnhancements);
-        if (window.location.pathname === "/checkout") {
-          const paymentEnhancements = document.createElement("script");
-          paymentEnhancements.type = "module";
-          paymentEnhancements.src = "/checkout-payment-enhancements.js";
-          document.body.appendChild(paymentEnhancements);
-        }
-        if (window.location.pathname === "/pix") {
-          const pixEnhancements = document.createElement("script");
-          pixEnhancements.type = "module";
-          pixEnhancements.src = "/pix-payment-enhancements.js";
-          document.body.appendChild(pixEnhancements);
+        for (const name of ["admin-enhancements", "checkout-payment-enhancements"]) {
+          const enhancement = document.createElement("script");
+          enhancement.type = "module";
+          enhancement.src = `/${name}.js?v=${ENHANCEMENTS_VERSION}`;
+          document.body.appendChild(enhancement);
         }
       }, { once: true });
       document.body.appendChild(script);
