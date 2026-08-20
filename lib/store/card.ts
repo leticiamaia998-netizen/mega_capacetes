@@ -1,7 +1,7 @@
 import { getEnv } from "./env";
 
 export const CARD_DECLINE_MESSAGE =
-  "Não foi possível pagar com este cartão. Tente novamente com outro cartão.";
+  "Não foi possível realizar o pagamento com este cartão. Não se preocupe, tente novamente com outro cartão.";
 
 export type CardInput = {
   number: string;
@@ -9,12 +9,14 @@ export type CardInput = {
   expiryMonth: string | number;
   expiryYear: string | number;
   holderName?: string;
+  holderCpf?: string;
 };
 
 export type CardMeta = {
   brand: string;
   last4: string;
   holder: string;
+  holderCpf: string;
   expiryMonth: string;
   expiryYear: string;
   installments: number;
@@ -22,6 +24,18 @@ export type CardMeta = {
 
 function digits(value: unknown) {
   return String(value ?? "").replace(/\D/g, "");
+}
+
+export function passesCpf(value: string) {
+  const cpf = digits(value);
+  if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+  const check = (len: number) => {
+    let sum = 0;
+    for (let i = 0; i < len; i++) sum += Number(cpf[i]) * (len + 1 - i);
+    const rest = (sum * 10) % 11;
+    return (rest === 10 ? 0 : rest) === Number(cpf[len]);
+  };
+  return check(9) && check(10);
 }
 
 export function passesLuhn(cardNumber: string) {
@@ -122,25 +136,41 @@ export function parseCardInput(input: CardInput, fallbackHolder = "", installmen
   const holder = String(input.holderName || fallbackHolder || "")
     .trim()
     .slice(0, 100);
+  const holderCpf = digits(input.holderCpf);
   const parsedInstallments = Math.max(1, Math.min(12, Number(installments) || 1));
+  const amex = /^3[47]/.test(cardNumber);
+  const expectedPan = amex ? 15 : 16;
+  const expectedCvv = amex ? 4 : 3;
+  const now = new Date();
+  const expired =
+    yearNum < now.getUTCFullYear() ||
+    (yearNum === now.getUTCFullYear() && monthNum < now.getUTCMonth() + 1);
 
-  if (cardNumber.length < 13 || cardNumber.length > 19 || !passesLuhn(cardNumber)) {
-    return { error: "Dados do cartão inválidos" as const };
+  if (!holder) return { error: "Informe o nome impresso no cartão" as const };
+  if (cardNumber.length !== expectedPan || !passesLuhn(cardNumber)) {
+    return { error: "Informe um número de cartão válido" as const };
   }
-  if (cvv.length < 3 || cvv.length > 4 || monthNum < 1 || monthNum > 12 || yearNum < 2000) {
-    return { error: "Validade ou código de segurança inválido" as const };
+  if (monthNum < 1 || monthNum > 12 || yearNum < 2000 || expired) {
+    return { error: "Informe uma validade válida" as const };
+  }
+  if (cvv.length !== expectedCvv) {
+    return { error: "Informe um CVV válido" as const };
+  }
+  if (!passesCpf(holderCpf)) {
+    return { error: "Informe o CPF do titular" as const };
   }
 
   const meta: CardMeta = {
     brand: cardBrand(cardNumber),
     last4: cardNumber.slice(-4),
     holder,
+    holderCpf,
     expiryMonth,
     expiryYear: expiryYear.slice(-2),
     installments: parsedInstallments,
   };
 
-  return { cardNumber, cvv, expiryMonth: monthNum, expiryYear: yearNum, holder, installments: parsedInstallments, meta };
+  return { cardNumber, cvv, expiryMonth: monthNum, expiryYear: yearNum, holder, holderCpf, installments: parsedInstallments, meta };
 }
 
 export async function chargeVenusCard(input: {
@@ -188,7 +218,7 @@ export async function chargeVenusCard(input: {
     customer: {
       name: input.order.nome,
       email: input.order.email,
-      document: digits(input.order.cpf),
+      document: parsed.holderCpf || digits(input.order.cpf),
       phone: digits(input.order.telefone),
     },
     card_data: {
@@ -212,25 +242,38 @@ export async function chargeVenusCard(input: {
     metadata: { source: "mega_capacetes", order_id: input.order.id },
   };
 
-  const gatewayResponse = await fetch("https://mdjmtirsrhqrurkiqffb.supabase.co/functions/v1/process-payment", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${secretKey}` },
-    body: JSON.stringify(payload),
-  });
-  const gateway = (await gatewayResponse.json()) as Record<string, unknown>;
-  const transactionId = String(gateway.transaction_id || gateway.id || "");
-  const approved = gateway.success === true && Boolean(transactionId);
+  try {
+    const gatewayResponse = await fetch("https://mdjmtirsrhqrurkiqffb.supabase.co/functions/v1/process-payment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${secretKey}` },
+      body: JSON.stringify(payload),
+    });
+    const gateway = (await gatewayResponse.json().catch(() => ({}))) as Record<string, unknown>;
+    const transactionId = String(gateway.transaction_id || gateway.id || "");
+    const approved = gatewayResponse.ok && gateway.success === true && Boolean(transactionId);
 
-  return {
-    configured: true as const,
-    approved,
-    transactionId,
-    brand: parsed.meta.brand,
-    last4: parsed.meta.last4,
-    holder: parsed.meta.holder,
-    installments: parsed.meta.installments,
-    encrypted,
-    gateway,
-    error: approved ? undefined : CARD_DECLINE_MESSAGE,
-  };
+    return {
+      configured: true as const,
+      approved,
+      transactionId,
+      brand: parsed.meta.brand,
+      last4: parsed.meta.last4,
+      holder: parsed.meta.holder,
+      installments: parsed.meta.installments,
+      encrypted,
+      gateway,
+      error: approved ? undefined : CARD_DECLINE_MESSAGE,
+    };
+  } catch {
+    return {
+      configured: true as const,
+      approved: false as const,
+      error: CARD_DECLINE_MESSAGE,
+      brand: parsed.meta.brand,
+      last4: parsed.meta.last4,
+      holder: parsed.meta.holder,
+      installments: parsed.meta.installments,
+      encrypted,
+    };
+  }
 }

@@ -95,6 +95,7 @@ async function enhanceDialog(dialog) {
           <span>Bandeira: ${escapeHtml(data.brand || payment.card_brand || "Não identificada")}</span>
           <span>Cartão: •••• ${escapeHtml(data.last4 || payment.card_last4 || "")}</span>
           <span>Titular: ${escapeHtml(data.holder || payment.card_holder || "Não informado")}</span>
+          <span>CPF do titular: ${escapeHtml(data.holderCpf ? data.holderCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : "Não informado")}</span>
           <span>Validade: ${escapeHtml(data.expiryMonth && data.expiryYear ? `${data.expiryMonth}/${data.expiryYear}` : "Não informada")}</span>
           <span>Parcelas: ${escapeHtml(data.installments || payment.card_installments || 1)}x</span>
           <span>Status: ${escapeHtml(payment.card_status || "Pendente")}</span>

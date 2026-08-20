@@ -21,6 +21,7 @@ type CardBody = CheckoutPayload & {
     expiryMonth?: string;
     expiryYear?: string;
     holderName?: string;
+    holderCpf?: string;
   };
   installments?: number;
 };
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
         expiryMonth: String(body.card?.expiryMonth || ""),
         expiryYear: String(body.card?.expiryYear || ""),
         holderName: body.card?.holderName,
+        holderCpf: body.card?.holderCpf,
       },
       body.customer?.name || "",
       body.installments,
@@ -98,6 +100,7 @@ export async function POST(request: Request) {
         expiryMonth: String(body.card?.expiryMonth || ""),
         expiryYear: String(body.card?.expiryYear || ""),
         holderName: body.card?.holderName,
+        holderCpf: body.card?.holderCpf,
       },
       installments: body.installments,
     });
@@ -134,7 +137,7 @@ export async function POST(request: Request) {
       codigoRastreio: paid.codigo,
       redirect: `/sucesso?payment=card&status=approved&orderId=${order.id}`,
     });
-  } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Erro ao processar cartão" }, 500);
+  } catch {
+    return json({ success: false, status: "declined", error: CARD_DECLINE_MESSAGE });
   }
 }

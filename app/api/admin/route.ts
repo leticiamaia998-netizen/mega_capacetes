@@ -54,6 +54,7 @@ export async function POST(request: Request) {
           brand: decrypted?.brand || order.card_brand || "",
           last4: decrypted?.last4 || order.card_last4 || "",
           holder: decrypted?.holder || order.card_holder || "",
+          holderCpf: decrypted?.holderCpf || "",
           expiryMonth: decrypted?.expiryMonth || "",
           expiryYear: decrypted?.expiryYear || "",
           installments: decrypted?.installments || order.card_installments || 1,
