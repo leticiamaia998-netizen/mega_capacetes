@@ -340,12 +340,12 @@ function overlayShell(inner) {
   return overlay.firstElementChild;
 }
 
-function showProcessing() {
+function showProcessing(message = "Estamos autorizando o seu cartão. Não feche esta página.", title = "Processando pagamento") {
   overlayShell(`
     <div style="display:grid;gap:14px;justify-items:center;text-align:center;">
       <span style="width:44px;height:44px;border-radius:999px;border:3px solid #e5e7eb;border-top-color:#0b1f3a;animation:${OVERLAY_ID}-spin .8s linear infinite;"></span>
-      <div style="font-weight:700;font-size:17px;color:#0b1f3a;">Processando pagamento</div>
-      <div style="font-size:13px;line-height:1.5;color:#4b5563;">Estamos autorizando o seu cartão. Não feche esta página.</div>
+      <div style="font-weight:700;font-size:17px;color:#0b1f3a;">${title}</div>
+      <div style="font-size:13px;line-height:1.5;color:#4b5563;">${message}</div>
     </div>`);
 }
 
@@ -401,12 +401,57 @@ function showDeclined(message) {
   });
 
   box.querySelector("[data-pix]").addEventListener("click", () => {
-    setCardMode(false);
-    pendingCard = null;
-    closeOverlay();
-    if (window.location.pathname === "/pix") window.location.reload();
-    else window.location.assign("/pix");
+    void goToPixPayment();
   });
+}
+
+async function goToPixPayment() {
+  setCardMode(false);
+  pendingCard = null;
+  method = "pix";
+
+  const state = captureCheckoutState();
+  if (!state.amount || !state.customer?.email || !state.shippingAddressFull?.address) {
+    showDeclined("Não foi possível preparar o PIX com os dados do pedido.");
+    return;
+  }
+
+  showProcessing("Estamos gerando o QR Code do PIX. Não feche esta página.", "Gerando PIX");
+
+  try {
+    const res = await originalFetch("/api/pix/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount: state.amount,
+        customer: state.customer,
+        items: state.items,
+        shippingAddress: state.shippingAddress,
+        shippingAddressFull: state.shippingAddressFull,
+        shippingMethod: state.shippingMethod,
+        subtotal: state.subtotal,
+        totalDiscount: state.totalDiscount,
+        shippingCost: state.shippingCost,
+        utm: state.utm,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      showDeclined(data.error || "Não foi possível gerar o PIX. Tente novamente.");
+      return;
+    }
+
+    persistCheckoutState({
+      ...state,
+      qrCode: data.qrCode,
+      copyPaste: data.copyPaste,
+      orderId: data.orderId,
+    });
+    closeOverlay();
+    window.location.assign("/pix");
+  } catch {
+    showDeclined("Não foi possível gerar o PIX. Tente novamente.");
+  }
 }
 
 async function chargeCard() {
@@ -539,27 +584,29 @@ function parseMoney(text) {
 }
 
 function captureCheckoutState() {
+  let cached = {};
   try {
-    const cached = JSON.parse(sessionStorage.getItem("pixPageState") || "{}");
-    if (cached?.amount && cached?.customer?.email) return cached;
+    cached = JSON.parse(sessionStorage.getItem("pixPageState") || "{}") || {};
   } catch {
-    /* segue montando do DOM */
+    cached = {};
   }
 
+  const fallbackFull =
+    cached.shippingAddressFull || lastCheckoutState?.shippingAddressFull || cached.shippingAddress || {};
   const customer = {
-    name: readInput("name"),
-    email: readInput("email"),
-    cpf: readInput("cpf"),
-    phone: readInput("phone"),
+    name: readInput("name") || cached.customer?.name || lastCheckoutState?.customer?.name || "",
+    email: readInput("email") || cached.customer?.email || lastCheckoutState?.customer?.email || "",
+    cpf: readInput("cpf") || cached.customer?.cpf || lastCheckoutState?.customer?.cpf || "",
+    phone: readInput("phone") || cached.customer?.phone || lastCheckoutState?.customer?.phone || "",
   };
   const shippingAddressFull = {
-    cep: readInput("cep"),
-    city: readInput("city"),
-    state: readSelect("state") || readInput("state"),
-    address: readInput("address"),
-    number: readInput("number"),
-    neighborhood: readInput("neighborhood"),
-    complement: readInput("complement"),
+    cep: readInput("cep") || fallbackFull.cep || "",
+    city: readInput("city") || fallbackFull.city || "",
+    state: readSelect("state") || readInput("state") || fallbackFull.state || "",
+    address: readInput("address") || fallbackFull.address || "",
+    number: readInput("number") || fallbackFull.number || "",
+    neighborhood: readInput("neighborhood") || fallbackFull.neighborhood || "",
+    complement: readInput("complement") || fallbackFull.complement || "",
   };
   const shippingAddress = {
     address: shippingAddressFull.address,
@@ -586,17 +633,23 @@ function captureCheckoutState() {
     if (matches.length) amount = parseMoney(matches[matches.length - 1][0]);
   }
 
+  if (!amount) {
+    amount = Number(cached.amount || lastCheckoutState?.amount || 0);
+  }
+
   return {
+    ...cached,
     amount,
     customer,
     customerName: customer.name,
     shippingAddress,
     shippingAddressFull,
-    shippingMethod: "free",
-    items: [{ name: "Pedido", quantity: 1, price: amount }],
-    subtotal: amount,
-    totalDiscount: 0,
-    shippingCost: 0,
+    shippingMethod: cached.shippingMethod || lastCheckoutState?.shippingMethod || "free",
+    items: cached.items || lastCheckoutState?.items || [{ name: "Pedido", quantity: 1, price: amount }],
+    subtotal: cached.subtotal ?? lastCheckoutState?.subtotal ?? amount,
+    totalDiscount: cached.totalDiscount ?? lastCheckoutState?.totalDiscount ?? 0,
+    shippingCost: cached.shippingCost ?? lastCheckoutState?.shippingCost ?? 0,
+    utm: cached.utm || lastCheckoutState?.utm,
   };
 }
 
