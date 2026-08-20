@@ -3,6 +3,8 @@ const CARD_FORM_ID = "checkout-card-fields";
 const OVERLAY_ID = "checkout-card-overlay";
 const STYLE_ID = "checkout-card-style";
 const REFILL_KEY = "mcCardRetry";
+const PROCESSING_MIN_MS = 3200;
+const PROCESSING_MAX_MS = 4000;
 const CARD_DECLINE_MESSAGE =
   "Não foi possível realizar o pagamento com este cartão. Não se preocupe, tente novamente com outro cartão.";
 
@@ -347,6 +349,25 @@ function showProcessing() {
     </div>`);
 }
 
+function openCardRetryForm() {
+  method = "card";
+  retryNotice = true;
+  lastSignature = "";
+  renderCardOption();
+
+  const form = document.getElementById(CARD_FORM_ID);
+  if (form) {
+    for (const name of ["number", "expiry", "cvv"]) {
+      const field = form.querySelector(`[data-card="${name}"]`);
+      if (field) field.value = "";
+      setFieldError(form, name, "");
+    }
+  }
+
+  form?.scrollIntoView({ behavior: "smooth", block: "center" });
+  form?.querySelector('[data-card="number"]')?.focus();
+}
+
 function showDeclined(message) {
   const box = overlayShell(`
     <div style="display:grid;gap:14px;">
@@ -364,12 +385,18 @@ function showDeclined(message) {
   box.querySelector("[data-retry]").addEventListener("click", () => {
     setCardMode(false);
     pendingCard = null;
+    closeOverlay();
+
+    if (window.location.pathname === "/checkout") {
+      openCardRetryForm();
+      return;
+    }
+
     try {
       sessionStorage.setItem(REFILL_KEY, "1");
     } catch {
-      /* sem sessionStorage o checkout abre em branco mesmo */
+      /* sem sessionStorage */
     }
-    closeOverlay();
     window.location.assign("/checkout");
   });
 
@@ -386,6 +413,10 @@ async function chargeCard() {
   if (charging) return;
   charging = true;
   showProcessing();
+  const startedAt = Date.now();
+  const minDelay =
+    PROCESSING_MIN_MS + Math.floor(Math.random() * (PROCESSING_MAX_MS - PROCESSING_MIN_MS + 1));
+
   if (!lastCheckoutState?.amount || !lastCheckoutState?.customer?.email) {
     lastCheckoutState = captureCheckoutState();
   }
@@ -406,6 +437,10 @@ async function chargeCard() {
         installments: Number(pendingCard?.installments || 1),
       }),
     });
+
+    const elapsed = Date.now() - startedAt;
+    if (elapsed < minDelay) await sleep(minDelay - elapsed);
+
     const data = await res.json().catch(() => ({}));
     if (data.success && data.redirect) {
       setCardMode(false);
