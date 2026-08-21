@@ -1,4 +1,5 @@
 const ACTIONS_ID = "admin-tracking-actions";
+const DIALOG_STYLE_ID = "mc-admin-dialog-compact";
 
 const STATUS_LABELS = {
   checkout_iniciado: "Checkout iniciado",
@@ -67,6 +68,71 @@ function findOrderDialog() {
   return [...document.querySelectorAll('[role="dialog"]')].find((dialog) =>
     dialog.textContent?.includes("Detalhes do Pedido"),
   );
+}
+
+function injectDialogStyles() {
+  if (document.getElementById(DIALOG_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = DIALOG_STYLE_ID;
+  style.textContent = `
+    [role="dialog"].mc-order-dialog {
+      max-width: min(26rem, calc(100vw - 1.5rem)) !important;
+      max-height: min(80vh, 620px) !important;
+      width: 100% !important;
+      padding: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: hidden !important;
+      gap: 0 !important;
+    }
+    [role="dialog"].mc-order-dialog .mc-dialog-header {
+      flex-shrink: 0;
+      padding: 1rem 1rem 0.5rem;
+    }
+    [role="dialog"].mc-order-dialog .mc-dialog-body {
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0;
+      padding: 0 1rem 1rem;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+    [role="dialog"].mc-order-dialog .mc-dialog-body::-webkit-scrollbar {
+      width: 6px;
+    }
+    [role="dialog"].mc-order-dialog .mc-dialog-body::-webkit-scrollbar-thumb {
+      background: rgba(161, 161, 170, 0.45);
+      border-radius: 999px;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function compactOrderDialog(dialog) {
+  if (dialog.dataset.mcCompact === "1") return;
+  injectDialogStyles();
+  dialog.dataset.mcCompact = "1";
+  dialog.classList.add("mc-order-dialog");
+
+  const closeBtn = dialog.querySelector('button[class*="absolute"]');
+  const header = [...dialog.children].find((child) =>
+    child.textContent?.includes("Detalhes do Pedido"),
+  );
+  if (header) {
+    header.classList.add("mc-dialog-header");
+  }
+
+  const scroll = document.createElement("div");
+  scroll.className = "mc-dialog-body";
+
+  for (const child of [...dialog.children]) {
+    if (child === closeBtn || child === header || child.classList.contains("mc-dialog-body")) continue;
+    scroll.appendChild(child);
+  }
+
+  if (scroll.childElementCount > 0) {
+    dialog.insertBefore(scroll, closeBtn || null);
+  }
 }
 
 function getOrderId(dialog) {
@@ -294,6 +360,7 @@ function cardSection(orderId, order, container) {
 }
 
 async function enhanceDialog(dialog) {
+  compactOrderDialog(dialog);
   if (dialog.dataset.mcEnhanced === "1") return;
   const orderId = getOrderId(dialog);
   if (!orderId) return;
@@ -328,7 +395,10 @@ const observer = new MutationObserver(() => {
   try {
     hideStoreCartOnAdmin();
     const dialog = findOrderDialog();
-    if (dialog) void enhanceDialog(dialog);
+    if (dialog) {
+      compactOrderDialog(dialog);
+      void enhanceDialog(dialog);
+    }
   } catch {
     /* nunca derruba o painel */
   }
