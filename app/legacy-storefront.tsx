@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 const APP_SCRIPT_ID = "stormzx-storefront-script";
-const ENHANCEMENTS_VERSION = "19";
+const ENHANCEMENTS_VERSION = "20";
 
 declare global {
   interface Window {

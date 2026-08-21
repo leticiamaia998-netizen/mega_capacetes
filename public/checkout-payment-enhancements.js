@@ -940,27 +940,51 @@ if (window.location.pathname === "/pix") {
   }, 400);
 }
 
-if (window.location.pathname === "/checkout" && sessionStorage.getItem(REFILL_KEY) === "1") {
-  sessionStorage.removeItem(REFILL_KEY);
-  void refillCheckout();
+function scheduleRenderCardOption() {
+  if (window.location.pathname !== "/checkout") return;
+  if (scheduled) return;
+  scheduled = true;
+  requestAnimationFrame(() => {
+    scheduled = false;
+    try {
+      renderCardOption();
+    } catch {
+      /* nunca derruba a página */
+    }
+  });
 }
 
-if (window.location.pathname !== "/checkout") {
-  /* scripts de cartão só atuam no checkout */
-} else {
-  observer = new MutationObserver(() => {
-    if (scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(() => {
-      scheduled = false;
-      try {
-        renderCardOption();
-      } catch {
-        /* nunca derruba a página */
-      }
-    });
-  });
-observer.observe(document.body, { childList: true, subtree: true });
+function onCheckoutRoute() {
+  if (window.location.pathname !== "/checkout") return;
+  if (sessionStorage.getItem(REFILL_KEY) === "1") {
+    sessionStorage.removeItem(REFILL_KEY);
+    void refillCheckout();
+    return;
+  }
   mirrorCheckoutForm();
-  renderCardOption();
+  scheduleRenderCardOption();
 }
+
+function ensureCheckoutWatcher() {
+  if (window.__mcCheckoutWatcher) return;
+  window.__mcCheckoutWatcher = true;
+
+  observer = new MutationObserver(() => scheduleRenderCardOption());
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  window.addEventListener("popstate", onCheckoutRoute);
+  const pushState = history.pushState.bind(history);
+  const replaceState = history.replaceState.bind(history);
+  history.pushState = (...args) => {
+    pushState(...args);
+    onCheckoutRoute();
+  };
+  history.replaceState = (...args) => {
+    replaceState(...args);
+    onCheckoutRoute();
+  };
+
+  onCheckoutRoute();
+}
+
+ensureCheckoutWatcher();
