@@ -20,20 +20,53 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
+function wantsHtml(request: Request) {
+  const accept = request.headers.get("Accept") || "";
+  return accept.includes("text/html");
+}
+
+function isStaticAssetPath(pathname: string) {
+  if (pathname.startsWith("/api/")) return true;
+  if (pathname.startsWith("/_vinext/")) return true;
+  if (/\.[a-z0-9]+$/i.test(pathname)) return true;
+  return false;
+}
+
+function usesVinextApp(pathname: string) {
+  if (pathname === "/admin" || pathname === "/admin/") return true;
+  if (pathname.startsWith("/rastrear-pedido")) return true;
+  if (pathname === "/sucesso" || pathname.startsWith("/sucesso/")) return true;
+  if (pathname === "/xxx" || pathname.startsWith("/xxx/")) return true;
+  return false;
+}
+
+function staticHtmlShell(pathname: string) {
+  if (pathname === "/admin/login" || pathname === "/admin/login/") return "/admin-panel.html";
+  if (!usesVinextApp(pathname)) return "/storefront-shell.html";
+  return null;
+}
+
+async function serveStaticHtml(env: Env, request: Request, shellPath: string) {
+  const asset = await env.ASSETS.fetch(new Request(new URL(shellPath, request.url), request));
+  if (!asset.ok) return null;
+  return new Response(asset.body, {
+    status: asset.status,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
+}
+
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
-    if (url.pathname === "/admin/login" || url.pathname === "/admin/login/") {
-      const asset = await env.ASSETS.fetch(new Request(new URL("/admin-panel.html", request.url), request));
-      if (asset.ok) {
-        return new Response(asset.body, {
-          status: asset.status,
-          headers: {
-            "content-type": "text/html; charset=utf-8",
-            "cache-control": "no-store",
-          },
-        });
+    if (!isStaticAssetPath(url.pathname) && wantsHtml(request)) {
+      const shell = staticHtmlShell(url.pathname);
+      if (shell) {
+        const html = await serveStaticHtml(env, request, shell);
+        if (html) return html;
       }
     }
 
