@@ -17,18 +17,5 @@ export default async function StorefrontRoute({ params }: StorefrontRouteProps) 
     redirect("/xxx");
   }
 
-  if (pathname === "/xxx") {
-    return (
-      <>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{document.documentElement.style.background="#09090b";document.body.style.background="#09090b";document.body.style.color="#fff";if(!localStorage.getItem("mcAdminToken"))location.replace("/xxx/login");}catch(e){}})();`,
-          }}
-        />
-        <LegacyStorefront />
-      </>
-    );
-  }
-
   return <LegacyStorefront />;
 }
