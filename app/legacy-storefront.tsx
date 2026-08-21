@@ -332,6 +332,18 @@ export default function LegacyStorefront() {
             );
           }
           const restTable = rawUrl.match(/\/rest\/v1\/([^/?]+)/)?.[1];
+          if (restTable === "user_roles") {
+            const accept = String(
+              new Headers(pixInit?.headers || (input instanceof Request ? input.headers : undefined)).get("Accept") || "",
+            );
+            const body = accept.includes("vnd.pgrst.object")
+              ? { role: "admin", user_id: ADMIN_USER_ID }
+              : [{ role: "admin", user_id: ADMIN_USER_ID }];
+            return new Response(JSON.stringify(body), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
           if (restTable && ADMIN_REST_TABLES.has(restTable)) {
             const parsed = new URL(rawUrl, window.location.origin);
             const headers = new Headers(
