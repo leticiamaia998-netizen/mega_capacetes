@@ -1,6 +1,6 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
-  const ENHANCEMENTS_VERSION = "23";
+  const ENHANCEMENTS_VERSION = "24";
   const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
   const ADMIN_STATUS = ["pending", "paid", "cancelled", "refunded"];
   const ADMIN_REST_TABLES = new Set([
@@ -344,27 +344,12 @@
     Object.assign(window.WebSocket, OriginalWebSocket);
   }
 
-  const SPA_ADMIN_ROUTES =
-    'v.jsx(Se,{path:"/xxx/login",element:v.jsx(HP,{})}),v.jsx(Se,{path:"/xxx",element:v.jsx(KP,{})})';
-  const SPA_ADMIN_ROUTES_PATCHED =
-    'v.jsx(Se,{path:"/admin/login",element:v.jsx(KP,{})}),v.jsx(Se,{path:"/xxx/login",element:v.jsx(HP,{})}),v.jsx(Se,{path:"/xxx",element:v.jsx(KP,{})})';
-
-  async function loadSpa() {
+  function loadSpa() {
     if (document.getElementById(APP_SCRIPT_ID)) return;
     const script = document.createElement("script");
     script.id = APP_SCRIPT_ID;
     script.type = "module";
-    try {
-      const res = await fetch("/assets/index-D36WQRm9.js", { cache: "no-store" });
-      let code = await res.text();
-      if (code.includes(SPA_ADMIN_ROUTES) && !code.includes('path:"/admin/login",element:v.jsx(KP')) {
-        code = code.replace(SPA_ADMIN_ROUTES, SPA_ADMIN_ROUTES_PATCHED);
-      }
-      code = code.replace(/N\("\/xxx"\)/g, 'N("/admin/login")');
-      script.src = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
-    } catch {
-      script.src = "/assets/index-D36WQRm9.js";
-    }
+    script.src = "/assets/index-D36WQRm9.js";
     script.addEventListener("error", () => showError("Não foi possível carregar o painel. Atualize a página."), {
       once: true,
     });
