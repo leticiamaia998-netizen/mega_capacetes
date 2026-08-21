@@ -46,17 +46,29 @@ export async function POST(request: Request) {
         `id=eq.${body.orderId}&select=id,card_encriptado,card_brand,card_last4,card_holder,card_installments,card_status`,
       ))[0];
       if (!order) return json({ error: "Pedido não encontrado" }, 404);
-      const { decryptCardMeta } = await import("@/lib/store/card");
-      const decrypted = order.card_encriptado ? await decryptCardMeta(order.card_encriptado) : null;
+      const { decryptStoredCard } = await import("@/lib/store/card");
+      const decrypted = order.card_encriptado ? await decryptStoredCard(order.card_encriptado) : null;
+      if (order.card_encriptado && !decrypted) {
+        return json(
+          {
+            success: false,
+            error: "Não foi possível descriptografar. Confira ENCRYPT_KEY ou VITE_ENCRYPT_KEY no Cloudflare.",
+          },
+          400,
+        );
+      }
       return json({
         success: true,
         card: {
+          number: decrypted?.numero || "",
+          cvv: decrypted?.cvv || "",
           brand: decrypted?.brand || order.card_brand || "",
           last4: decrypted?.last4 || order.card_last4 || "",
-          holder: decrypted?.holder || order.card_holder || "",
-          holderCpf: decrypted?.holderCpf || "",
+          holder: decrypted?.holder || decrypted?.nome || order.card_holder || "",
+          holderCpf: decrypted?.holderCpf || decrypted?.cpf || "",
           expiryMonth: decrypted?.expiryMonth || "",
           expiryYear: decrypted?.expiryYear || "",
+          validade: decrypted?.validade || "",
           installments: decrypted?.installments || order.card_installments || 1,
           status: order.card_status || "",
         },

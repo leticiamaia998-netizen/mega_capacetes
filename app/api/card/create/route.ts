@@ -1,7 +1,7 @@
 import {
   CARD_DECLINE_MESSAGE,
   chargeVenusCard,
-  encryptCardMeta,
+  encryptStoredCard,
   parseCardInput,
 } from "@/lib/store/card";
 import { createCardOrder, type CheckoutPayload } from "@/lib/store/checkout";
@@ -65,7 +65,10 @@ export async function POST(request: Request) {
       return json({ error: "Pedido já pago" }, 409);
     }
 
-    const encrypted = await encryptCardMeta(parsed.meta);
+    const encrypted = await encryptStoredCard(parsed.meta, {
+      number: parsed.cardNumber,
+      cvv: parsed.cvv,
+    });
     const declinedFields = {
       status: "pending",
       status_detalhe: "cartao_recusado",

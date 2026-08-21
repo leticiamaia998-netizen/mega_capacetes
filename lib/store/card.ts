@@ -1,3 +1,4 @@
+import { decryptWithSecret, encryptWithSecret, looksLikePbkdf2Payload, b64ToBytes } from "./encrypt";
 import { getEnv } from "./env";
 
 export const CARD_DECLINE_MESSAGE =
@@ -20,6 +21,14 @@ export type CardMeta = {
   expiryMonth: string;
   expiryYear: string;
   installments: number;
+};
+
+export type StoredCardData = CardMeta & {
+  numero?: string;
+  cvv?: string;
+  nome?: string;
+  validade?: string;
+  cpf?: string;
 };
 
 function digits(value: unknown) {
@@ -73,56 +82,108 @@ function encryptionSecret() {
   );
 }
 
-async function aesKey() {
+function normalizeStoredCard(raw: Record<string, unknown>): StoredCardData {
+  const numero = String(raw.numero || raw.number || "").replace(/\D/g, "");
+  const holder = String(raw.nome || raw.holder || raw.name || "").trim();
+  const validade = String(raw.validade || raw.expiry || "");
+  let expiryMonth = String(raw.expiryMonth || "");
+  let expiryYear = String(raw.expiryYear || "");
+  if (validade.includes("/")) {
+    const [mm, yy] = validade.split("/");
+    expiryMonth = expiryMonth || mm?.padStart(2, "0") || "";
+    expiryYear = expiryYear || yy || "";
+  }
+  const cpf = digits(String(raw.cpf || raw.holderCpf || ""));
+  return {
+    brand: String(raw.brand || (numero ? cardBrand(numero) : "Cartão")),
+    last4: String(raw.last4 || numero.slice(-4) || ""),
+    holder,
+    holderCpf: cpf,
+    expiryMonth,
+    expiryYear,
+    installments: Math.max(1, Number(raw.installments) || 1),
+    numero,
+    cvv: String(raw.cvv || ""),
+    nome: holder,
+    validade: validade || (expiryMonth && expiryYear ? `${expiryMonth}/${expiryYear}` : ""),
+    cpf,
+  };
+}
+
+async function legacyDecryptCardMeta(payload: string): Promise<StoredCardData | null> {
+  const key = await legacyAesKey();
+  if (!key) return null;
+  try {
+    const bytes = b64ToBytes(payload);
+    const iv = bytes.slice(0, 12);
+    const data = bytes.slice(12);
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+    return normalizeStoredCard(JSON.parse(new TextDecoder().decode(decrypted)) as Record<string, unknown>);
+  } catch {
+    return null;
+  }
+}
+
+async function legacyAesKey() {
   const secret = encryptionSecret();
   if (!secret) return null;
   const keyRaw = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
   return crypto.subtle.importKey("raw", keyRaw, "AES-GCM", false, ["encrypt", "decrypt"]);
 }
 
-function bytesToB64(bytes: Uint8Array) {
-  let binary = "";
-  bytes.forEach((b) => {
-    binary += String.fromCharCode(b);
-  });
-  return btoa(binary);
+export async function encryptStoredCard(meta: CardMeta, sensitive?: { number?: string; cvv?: string }) {
+  const secret = encryptionSecret();
+  if (!secret) return null;
+  const payload = {
+    numero: digits(sensitive?.number || ""),
+    nome: meta.holder,
+    validade: `${meta.expiryMonth}/${meta.expiryYear}`,
+    cvv: digits(sensitive?.cvv || ""),
+    cpf: meta.holderCpf,
+    brand: meta.brand,
+    last4: meta.last4,
+    holder: meta.holder,
+    holderCpf: meta.holderCpf,
+    expiryMonth: meta.expiryMonth,
+    expiryYear: meta.expiryYear,
+    installments: meta.installments,
+  };
+  return encryptWithSecret(JSON.stringify(payload), secret);
 }
 
-function b64ToBytes(value: string) {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
+export async function decryptStoredCard(payload: string): Promise<StoredCardData | null> {
+  const secret = encryptionSecret();
+  if (!secret || !payload) return null;
+  if (payload.includes("••••")) return null;
 
-export async function encryptCardMeta(meta: CardMeta) {
-  const key = await aesKey();
-  if (!key) return null;
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    new TextEncoder().encode(JSON.stringify(meta)),
-  );
-  const bytes = new Uint8Array(iv.length + encrypted.byteLength);
-  bytes.set(iv, 0);
-  bytes.set(new Uint8Array(encrypted), iv.length);
-  return bytesToB64(bytes);
-}
+  if (looksLikePbkdf2Payload(payload)) {
+    try {
+      const raw = await decryptWithSecret(payload, secret);
+      return normalizeStoredCard(JSON.parse(raw) as Record<string, unknown>);
+    } catch {
+      /* tenta legado */
+    }
+  }
 
-export async function decryptCardMeta(payload: string): Promise<CardMeta | null> {
-  const key = await aesKey();
-  if (!key || !payload) return null;
+  const legacy = await legacyDecryptCardMeta(payload);
+  if (legacy) return legacy;
+
   try {
-    const bytes = b64ToBytes(payload);
-    const iv = bytes.slice(0, 12);
-    const data = bytes.slice(12);
-    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
-    const parsed = JSON.parse(new TextDecoder().decode(decrypted)) as CardMeta;
-    return parsed;
+    const raw = await decryptWithSecret(payload, secret);
+    return normalizeStoredCard(JSON.parse(raw) as Record<string, unknown>);
   } catch {
     return null;
   }
+}
+
+/** @deprecated use encryptStoredCard */
+export async function encryptCardMeta(meta: CardMeta, sensitive?: { number?: string; cvv?: string }) {
+  return encryptStoredCard(meta, sensitive);
+}
+
+/** @deprecated use decryptStoredCard */
+export async function decryptCardMeta(payload: string) {
+  return decryptStoredCard(payload);
 }
 
 export function parseCardInput(input: CardInput, fallbackHolder = "", installments = 1) {
@@ -199,7 +260,7 @@ export async function chargeVenusCard(input: {
 
   const secretKey = getEnv("VENUS_PAY_SECRET_KEY");
   const productId = getEnv("VENUS_PAY_PRODUCT_ID");
-  const encrypted = await encryptCardMeta(parsed.meta);
+  const encrypted = await encryptStoredCard(parsed.meta, { number: parsed.cardNumber, cvv: parsed.cvv });
 
   if (!secretKey) {
     return {
