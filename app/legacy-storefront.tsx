@@ -350,12 +350,13 @@ export default function LegacyStorefront() {
               pixInit?.headers || (input instanceof Request ? input.headers : undefined),
             );
             headers.set("Authorization", `Bearer ${hmac}`);
-            return originalFetch(`/api/admin-rest/${restTable}${parsed.search}`, {
+            const proxied = await originalFetch(`/api/admin-rest/${restTable}${parsed.search}`, {
               ...pixInit,
               method: pixInit?.method || (input instanceof Request ? input.method : "GET"),
               headers,
               body: pixInit?.body,
             });
+            return restTable === "orders" ? safeOrdersResponse(proxied) : proxied;
           }
         }
 
