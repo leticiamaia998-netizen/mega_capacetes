@@ -4,7 +4,6 @@ import type { NextRequest } from "next/server";
 function wantsHtml(request: NextRequest) {
   const accept = request.headers.get("accept") || "";
   if (accept.includes("text/html")) return true;
-  // Navegadores e ferramentas muitas vezes enviam */* em vez de text/html.
   return accept.includes("*/*") && !accept.includes("application/json");
 }
 
@@ -22,25 +21,17 @@ function usesVinextApp(pathname: string) {
   return false;
 }
 
-function legacyAdminRedirect(request: NextRequest) {
-  return NextResponse.redirect(new URL("/xxx", request.url));
-}
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (isStaticAsset(pathname) || !wantsHtml(request)) {
     return NextResponse.next();
   }
 
-  if (pathname === "/xxx/login" || pathname.startsWith("/xxx/login/")) {
+  if (pathname === "/xxx" || pathname.startsWith("/xxx/")) {
     return NextResponse.redirect(new URL("/admin", request.url));
   }
 
   if (pathname === "/admin/login" || pathname === "/admin/login/") {
-    return legacyAdminRedirect(request);
-  }
-
-  if (pathname === "/xxx" || pathname === "/xxx/") {
     return NextResponse.rewrite(new URL("/admin-panel.html", request.url));
   }
 

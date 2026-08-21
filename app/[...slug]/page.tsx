@@ -11,11 +11,7 @@ export default async function StorefrontRoute({ params }: StorefrontRouteProps) 
   const { slug } = await params;
   const pathname = `/${slug.join("/")}`;
 
-  if (pathname === "/admin/login" || pathname === "/admin/login/") {
-    redirect("/xxx");
-  }
-
-  if (pathname === "/xxx/login") {
+  if (pathname === "/xxx" || pathname === "/xxx/" || pathname.startsWith("/xxx/")) {
     redirect("/admin");
   }
 
@@ -23,7 +19,7 @@ export default async function StorefrontRoute({ params }: StorefrontRouteProps) 
     return <AdminEntryPage />;
   }
 
-  if (pathname === "/admin/login") {
+  if (pathname === "/admin/login" || pathname === "/admin/login/") {
     return <AdminPanelPage />;
   }
 

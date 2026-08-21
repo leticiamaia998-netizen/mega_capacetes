@@ -1,7 +1,7 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
-  const ENHANCEMENTS_VERSION = "36";
-  const PANEL_PATH = "/xxx";
+  const ENHANCEMENTS_VERSION = "37";
+  const PANEL_PATH = "/admin/login";
 
   function isPanelPath(pathname) {
     return pathname === PANEL_PATH || pathname === `${PANEL_PATH}/`;
@@ -350,7 +350,8 @@
   }
 
   function loadSpa() {
-    if (document.getElementById(APP_SCRIPT_ID)) return;
+    const existing = document.getElementById(APP_SCRIPT_ID);
+    if (existing) existing.remove();
     const loading = document.getElementById("mc-admin-loading");
     if (loading) loading.remove();
     const root = document.getElementById("root");
@@ -380,11 +381,6 @@
     document.documentElement.style.background = "#09090b";
     document.body.style.background = "#09090b";
     document.body.style.color = "#fff";
-
-    const pathname = window.location.pathname;
-    if (pathname === "/admin/login" || pathname === "/admin/login/") {
-      history.replaceState(history.state, "", PANEL_PATH);
-    }
 
     if (!isPanelPath(window.location.pathname)) {
       const token = readAdminToken();
