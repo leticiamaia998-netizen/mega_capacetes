@@ -41,7 +41,7 @@ function usesVinextApp(pathname: string) {
 }
 
 function staticHtmlShell(pathname: string) {
-  if (pathname === "/login" || pathname === "/login/") return "/admin-panel.html";
+  if (pathname === "/painel" || pathname === "/painel/") return "/admin-panel.html";
   if (!usesVinextApp(pathname)) return "/storefront-shell.html";
   return null;
 }
@@ -67,8 +67,8 @@ const worker = {
         return Response.redirect(new URL("/admin", request.url).toString(), 302);
       }
 
-      if (url.pathname === "/admin/login" || url.pathname === "/admin/login/") {
-        return Response.redirect(new URL("/login", request.url).toString(), 302);
+      if (url.pathname === "/admin/login" || url.pathname === "/admin/login/" || url.pathname === "/login" || url.pathname === "/login/") {
+        return Response.redirect(new URL("/painel", request.url).toString(), 302);
       }
 
       const shell = staticHtmlShell(url.pathname);

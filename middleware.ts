@@ -37,9 +37,10 @@ export function middleware(request: NextRequest) {
     pathname === "/admin/login" ||
     pathname === "/admin/login/"
   ) {
-    if (pathname.startsWith("/admin/login")) {
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
+    return NextResponse.redirect(new URL("/painel", request.url));
+  }
+
+  if (pathname === "/painel" || pathname === "/painel/") {
     return NextResponse.rewrite(new URL("/admin-panel.html", request.url));
   }
 

@@ -15,15 +15,15 @@ export default async function StorefrontRoute({ params }: StorefrontRouteProps) 
     redirect("/admin");
   }
 
-  if (pathname === "/admin/login" || pathname === "/admin/login/") {
-    redirect("/login");
+  if (pathname === "/admin/login" || pathname === "/admin/login/" || pathname === "/login" || pathname === "/login/") {
+    redirect("/painel");
   }
 
   if (pathname === "/admin" || pathname === "/admin/") {
     return <AdminEntryPage />;
   }
 
-  if (pathname === "/login" || pathname === "/login/") {
+  if (pathname === "/painel" || pathname === "/painel/") {
     return <AdminPanelPage />;
   }
 

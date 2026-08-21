@@ -1,7 +1,7 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
   const ENHANCEMENTS_VERSION = "37";
-  const PANEL_PATH = "/login";
+  const PANEL_PATH = "/painel";
 
   function isPanelPath(pathname) {
     return pathname === PANEL_PATH || pathname === `${PANEL_PATH}/`;
