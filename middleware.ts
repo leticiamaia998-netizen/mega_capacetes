@@ -19,14 +19,21 @@ function usesVinextApp(pathname: string) {
   if (pathname === "/admin" || pathname === "/admin/") return true;
   if (pathname.startsWith("/rastrear-pedido")) return true;
   if (pathname === "/sucesso" || pathname.startsWith("/sucesso/")) return true;
-  if (pathname === "/xxx" || pathname.startsWith("/xxx/")) return true;
   return false;
+}
+
+function legacyAdminRedirect(request: NextRequest) {
+  return NextResponse.redirect(new URL("/admin/login", request.url));
 }
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (isStaticAsset(pathname) || !wantsHtml(request)) {
     return NextResponse.next();
+  }
+
+  if (pathname === "/xxx" || pathname.startsWith("/xxx/")) {
+    return legacyAdminRedirect(request);
   }
 
   if (pathname === "/admin/login" || pathname === "/admin/login/") {

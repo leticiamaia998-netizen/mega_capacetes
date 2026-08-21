@@ -1,7 +1,6 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
-  const ENHANCEMENTS_VERSION = "34";
-  let restorePanelUrl = "";
+  const ENHANCEMENTS_VERSION = "35";
   const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
   const ADMIN_STATUS = ["pending", "paid", "cancelled", "refunded"];
   const ADMIN_REST_TABLES = new Set([
@@ -365,23 +364,6 @@
         enhancement.type = "module";
         enhancement.src = `/admin-enhancements.js?v=${ENHANCEMENTS_VERSION}`;
         document.body.appendChild(enhancement);
-
-        if (restorePanelUrl) {
-          const url = restorePanelUrl;
-          restorePanelUrl = "";
-          const started = Date.now();
-          const waitForPanel = () => {
-            const root = document.getElementById("root");
-            const text = root?.innerText || "";
-            if (/Pedidos|Visitantes|Gateways|Receita/i.test(text)) {
-              history.replaceState(history.state, "", url);
-              return;
-            }
-            if (Date.now() - started > 15000) return;
-            window.setTimeout(waitForPanel, 250);
-          };
-          window.setTimeout(waitForPanel, 500);
-        }
       },
       { once: true },
     );
@@ -421,13 +403,6 @@
     }
 
     injectAdminSession();
-
-    // O bundle compilado registra o painel em /xxx. Mantemos /admin/login na barra
-    // trocando a rota só durante a inicialização do React Router.
-    if (/^\/admin\/login(\/|$)/.test(window.location.pathname)) {
-      restorePanelUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      history.replaceState(history.state, "", "/xxx");
-    }
 
     if (typeof window.crypto.randomUUID !== "function") {
       Object.defineProperty(window.crypto, "randomUUID", {

@@ -37,7 +37,6 @@ function usesVinextApp(pathname: string) {
   if (pathname === "/admin" || pathname === "/admin/") return true;
   if (pathname.startsWith("/rastrear-pedido")) return true;
   if (pathname === "/sucesso" || pathname.startsWith("/sucesso/")) return true;
-  if (pathname === "/xxx" || pathname.startsWith("/xxx/")) return true;
   return false;
 }
 
@@ -64,6 +63,10 @@ const worker = {
     const url = new URL(request.url);
 
     if (!isStaticAssetPath(url.pathname) && wantsHtml(request)) {
+      if (url.pathname === "/xxx" || url.pathname.startsWith("/xxx/")) {
+        return Response.redirect(new URL("/admin/login", request.url).toString(), 302);
+      }
+
       const shell = staticHtmlShell(url.pathname);
       if (shell) {
         const html = await serveStaticHtml(env, request, shell);

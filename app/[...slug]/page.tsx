@@ -12,7 +12,7 @@ export default async function StorefrontRoute({ params }: StorefrontRouteProps) 
   const pathname = `/${slug.join("/")}`;
 
   if (pathname === "/xxx" || pathname === "/xxx/") {
-    redirect("/admin");
+    redirect("/admin/login");
   }
 
   if (pathname === "/xxx/login") {
