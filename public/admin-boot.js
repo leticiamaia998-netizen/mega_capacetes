@@ -1,6 +1,6 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
-  const ENHANCEMENTS_VERSION = "32";
+  const ENHANCEMENTS_VERSION = "33";
   let restorePanelUrl = "";
   const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
   const ADMIN_STATUS = ["pending", "paid", "cancelled", "refunded"];
@@ -361,17 +361,27 @@
     script.addEventListener(
       "load",
       () => {
-        if (restorePanelUrl) {
-          const url = restorePanelUrl;
-          restorePanelUrl = "";
-          window.setTimeout(() => {
-            history.replaceState(history.state, "", url);
-          }, 0);
-        }
         const enhancement = document.createElement("script");
         enhancement.type = "module";
         enhancement.src = `/admin-enhancements.js?v=${ENHANCEMENTS_VERSION}`;
         document.body.appendChild(enhancement);
+
+        if (restorePanelUrl) {
+          const url = restorePanelUrl;
+          restorePanelUrl = "";
+          const started = Date.now();
+          const waitForPanel = () => {
+            const root = document.getElementById("root");
+            const text = root?.innerText || "";
+            if (/Pedidos|Visitantes|Gateways|Receita/i.test(text)) {
+              history.replaceState(history.state, "", url);
+              return;
+            }
+            if (Date.now() - started > 15000) return;
+            window.setTimeout(waitForPanel, 250);
+          };
+          window.setTimeout(waitForPanel, 500);
+        }
       },
       { once: true },
     );
