@@ -2,6 +2,8 @@ import { json, options } from "@/lib/store/http";
 import { findRastreio, timelineFrom } from "@/lib/store/tracking";
 import { sbSelect, type OrderRow } from "@/lib/store/supabase";
 
+export const dynamic = "force-dynamic";
+
 export function OPTIONS() {
   return options();
 }
@@ -21,12 +23,17 @@ export async function GET(request: Request) {
     ))[0] || null;
   }
 
+  const timeline = timelineFrom(String(origem.origem_at || new Date().toISOString()), {
+    cidade: endereco?.cidade,
+    estado: endereco?.estado,
+  });
+
   return json({
     success: true,
     codigo: origem.codigo,
     nome_cliente: origem.nome_cliente || endereco?.nome,
     origem_at: origem.origem_at,
     endereco,
-    timeline: timelineFrom(String(origem.origem_at || new Date().toISOString())),
+    timeline,
   });
 }

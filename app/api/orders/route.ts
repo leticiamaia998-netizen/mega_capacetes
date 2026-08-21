@@ -29,7 +29,10 @@ export async function POST(request: Request) {
         nome_cliente: origem.nome_cliente || endereco?.nome,
         origem_at: origem.origem_at,
         endereco,
-        timeline: timelineFrom(String(origem.origem_at || new Date().toISOString())),
+        timeline: timelineFrom(String(origem.origem_at || new Date().toISOString()), {
+          cidade: endereco?.cidade,
+          estado: endereco?.estado,
+        }),
       });
     }
 
