@@ -70,7 +70,9 @@ function findOrderDialog() {
 }
 
 function getOrderId(dialog) {
-  const match = dialog.textContent?.match(/ID do Pedido:\s*([0-9a-f-]{8,})/i);
+  const match = dialog.textContent?.match(
+    /ID do Pedido:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
+  );
   return match?.[1]?.trim() || null;
 }
 
