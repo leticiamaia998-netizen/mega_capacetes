@@ -27,15 +27,15 @@ no banco e guarda o detalhe do fluxo em `orders.status_detalhe`.
 
 ## 2. Usuário admin (login do painel `/xxx`)
 
-1. **Authentication → Users → Add User**.
-2. Email e senha fortes (ex: `admin@megacapacetes.store`).
-3. Copie o **UUID** do usuário.
-4. No SQL Editor:
+O painel entra com as variáveis do Cloudflare, **não** com e-mail/senha do Supabase:
 
-```sql
-INSERT INTO public.user_roles (user_id, role)
-VALUES ('COLE-O-UUID-AQUI', 'admin');
-```
+| Variável | Uso |
+|---|---|
+| `ADMIN_USER` | Usuário da tela `/xxx/login` |
+| `ADMIN_PASS` | Senha da tela `/xxx/login` |
+| `ADMIN_SESSION_SECRET` | Segredo HMAC da sessão (64+ caracteres aleatórios) |
+
+Abra `https://SEU-DOMINIO/xxx/login` e use exatamente esses valores.
 
 ---
 

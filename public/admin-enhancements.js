@@ -26,6 +26,12 @@ function isAdminArea() {
 }
 
 function getAccessToken() {
+  try {
+    const hmac = localStorage.getItem("mcAdminToken");
+    if (hmac) return hmac;
+  } catch {
+    /* ignore */
+  }
   for (const key of Object.keys(localStorage)) {
     if (!key.includes("auth-token")) continue;
     try {

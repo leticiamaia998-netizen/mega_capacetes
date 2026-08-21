@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 const APP_SCRIPT_ID = "stormzx-storefront-script";
-const ENHANCEMENTS_VERSION = "12";
+const ENHANCEMENTS_VERSION = "13";
 
 declare global {
   interface Window {
@@ -181,6 +181,47 @@ function jwtRole(token: string) {
   }
 }
 
+const ADMIN_REST_TABLES = new Set([
+  "orders",
+  "user_roles",
+  "notifications",
+  "payment_gateways",
+  "price_overrides",
+  "pix_errors",
+  "rastreio_origem",
+  "orders_status",
+]);
+
+const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
+
+function readAdminToken() {
+  try {
+    return localStorage.getItem("mcAdminToken") || "";
+  } catch {
+    return "";
+  }
+}
+
+function adminUserEmail() {
+  try {
+    const name = localStorage.getItem("mcAdminUser") || "admin";
+    return name.includes("@") ? name : `${name}@admin.local`;
+  } catch {
+    return "admin@admin.local";
+  }
+}
+
+function fakeAdminUser() {
+  return {
+    id: ADMIN_USER_ID,
+    aud: "authenticated",
+    role: "authenticated",
+    email: adminUserEmail(),
+    app_metadata: { provider: "email" },
+    user_metadata: {},
+  };
+}
+
 function reportCrash(detail: string) {
   window.setTimeout(() => {
     const root = document.getElementById("root");
@@ -262,6 +303,56 @@ export default function LegacyStorefront() {
         let pixInit = init;
         if (isPixCreate && !payingCardOnCheckout) {
           pixInit = enrichPixCreateInit(init);
+        }
+
+        const hmac = readAdminToken();
+        if (hmac) {
+          if (/\/auth\/v1\/user(?:\?|$)/.test(rawUrl)) {
+            return new Response(JSON.stringify(fakeAdminUser()), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          if (/\/auth\/v1\/logout/.test(rawUrl)) {
+            localStorage.removeItem("mcAdminToken");
+            localStorage.removeItem("mcAdminUser");
+            return new Response(null, { status: 204 });
+          }
+          if (/\/auth\/v1\/token/.test(rawUrl)) {
+            const user = fakeAdminUser();
+            return new Response(
+              JSON.stringify({
+                access_token: hmac,
+                refresh_token: "mc-admin-refresh",
+                expires_in: 28800,
+                token_type: "bearer",
+                user,
+              }),
+              { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const restTable = rawUrl.match(/\/rest\/v1\/([^/?]+)/)?.[1];
+          if (restTable && ADMIN_REST_TABLES.has(restTable)) {
+            const parsed = new URL(rawUrl, window.location.origin);
+            const headers = new Headers(
+              pixInit?.headers || (input instanceof Request ? input.headers : undefined),
+            );
+            headers.set("Authorization", `Bearer ${hmac}`);
+            return originalFetch(`/api/admin-rest/${restTable}${parsed.search}`, {
+              ...pixInit,
+              method: pixInit?.method || (input instanceof Request ? input.method : "GET"),
+              headers,
+              body: pixInit?.body,
+            });
+          }
+        }
+
+        if (hmac && /\/api\/admin(?:-gateways|-login|-verify|-rest)?(?:\/|$|\?)/.test(rawUrl)) {
+          const headers = new Headers(
+            pixInit?.headers || (input instanceof Request ? input.headers : undefined),
+          );
+          if (!headers.get("Authorization")) headers.set("Authorization", `Bearer ${hmac}`);
+          pixInit = { ...pixInit, headers };
         }
 
         const fn = rawUrl.match(/\/functions\/v1\/([^/?]+)/);
