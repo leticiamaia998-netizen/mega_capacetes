@@ -55,6 +55,9 @@ export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    document.documentElement.style.background = "#09090b";
+    document.body.style.background = "#09090b";
+    document.body.style.color = "#fff";
     const token = localStorage.getItem("mcAdminToken");
     if (!token) return;
     void fetch("/api/admin-verify", { headers: { Authorization: `Bearer ${token}` } })
@@ -93,7 +96,7 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#09090b", color: "#fff", display: "grid", placeItems: "center", padding: 20, fontFamily: "system-ui, Segoe UI, Arial, sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#09090b", color: "#fff", display: "grid", placeItems: "center", padding: 20, fontFamily: "system-ui, Segoe UI, Arial, sans-serif", position: "relative", zIndex: 50 }}>
       <form onSubmit={onSubmit} style={{ width: "100%", maxWidth: 380, background: "#18181b", border: "1px solid #27272a", borderRadius: 16, padding: 28 }}>
         <p style={{ margin: 0, fontSize: 12, letterSpacing: 1.4, color: "#a1a1aa", fontWeight: 700 }}>MEGACAPACETES</p>
         <h1 style={{ margin: "8px 0 20px", fontSize: 24 }}>Painel admin</h1>

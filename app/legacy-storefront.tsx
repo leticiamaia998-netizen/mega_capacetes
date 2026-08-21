@@ -299,7 +299,6 @@ async function mapAdminTableResponse(table: string, response: Response) {
 }
 
 function reportCrash(detail: string) {
-  if (/^\/xxx(\/|$)/.test(window.location.pathname)) return;
   window.setTimeout(() => {
     const root = document.getElementById("root");
     if (!root || root.childElementCount > 0) return;
@@ -328,6 +327,10 @@ export default function LegacyStorefront() {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (/^\/xxx(\/|$)/.test(window.location.pathname) && !readAdminToken()) {
+      window.location.replace("/xxx/login");
+      return;
+    }
     if (document.getElementById(APP_SCRIPT_ID)) return;
     injectAdminSession();
     if (/^\/xxx(\/|$)/.test(window.location.pathname)) {

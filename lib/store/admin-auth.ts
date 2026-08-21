@@ -24,14 +24,18 @@ function fromBase64Url(value: string) {
   return bytes;
 }
 
+function sessionSecret() {
+  const configured = getEnv("ADMIN_SESSION_SECRET");
+  if (configured.length >= 16) return configured;
+  const user = getEnv("ADMIN_USER");
+  const pass = getEnv("ADMIN_PASS");
+  return `mc-admin-fallback:${user}:${pass}`.padEnd(32, "0");
+}
+
 async function hmacKey() {
-  const secret = getEnv("ADMIN_SESSION_SECRET");
-  if (!secret || secret.length < 16) {
-    throw new Error("ADMIN_SESSION_SECRET ausente ou curto demais");
-  }
   return crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(secret),
+    new TextEncoder().encode(sessionSecret()),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"],
