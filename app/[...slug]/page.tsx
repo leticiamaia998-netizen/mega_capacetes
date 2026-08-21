@@ -1,4 +1,5 @@
 import LegacyStorefront from "../legacy-storefront";
+import AdminEntryPage from "../admin/page";
 import { redirect } from "next/navigation";
 
 type StorefrontRouteProps = {
@@ -15,6 +16,10 @@ export default async function StorefrontRoute({ params }: StorefrontRouteProps) 
 
   if (pathname === "/xxx/login") {
     redirect("/admin");
+  }
+
+  if (pathname === "/admin" || pathname === "/admin/") {
+    return <AdminEntryPage />;
   }
 
   return <LegacyStorefront />;
