@@ -1,6 +1,6 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
-  const ENHANCEMENTS_VERSION = "34";
+  const ENHANCEMENTS_VERSION = "36";
 
   const FUNCTION_MAP = {
     "checkout-create-pix": "/api/pix/create",

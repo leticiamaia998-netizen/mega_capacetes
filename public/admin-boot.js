@@ -1,6 +1,11 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
-  const ENHANCEMENTS_VERSION = "35";
+  const ENHANCEMENTS_VERSION = "36";
+  const PANEL_PATH = "/xxx";
+
+  function isPanelPath(pathname) {
+    return pathname === PANEL_PATH || pathname === `${PANEL_PATH}/`;
+  }
   const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
   const ADMIN_STATUS = ["pending", "paid", "cancelled", "refunded"];
   const ADMIN_REST_TABLES = new Set([
@@ -376,9 +381,14 @@
     document.body.style.background = "#09090b";
     document.body.style.color = "#fff";
 
-    if (!/^\/admin\/login(\/|$)/.test(window.location.pathname)) {
+    const pathname = window.location.pathname;
+    if (pathname === "/admin/login" || pathname === "/admin/login/") {
+      history.replaceState(history.state, "", PANEL_PATH);
+    }
+
+    if (!isPanelPath(window.location.pathname)) {
       const token = readAdminToken();
-      window.location.replace(token ? "/admin/login" : "/admin");
+      window.location.replace(token ? PANEL_PATH : "/admin");
       return;
     }
 

@@ -23,7 +23,7 @@ function usesVinextApp(pathname: string) {
 }
 
 function legacyAdminRedirect(request: NextRequest) {
-  return NextResponse.redirect(new URL("/admin/login", request.url));
+  return NextResponse.redirect(new URL("/xxx", request.url));
 }
 
 export function middleware(request: NextRequest) {
@@ -32,11 +32,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (pathname === "/xxx" || pathname.startsWith("/xxx/")) {
-    return legacyAdminRedirect(request);
+  if (pathname === "/xxx/login" || pathname.startsWith("/xxx/login/")) {
+    return NextResponse.redirect(new URL("/admin", request.url));
   }
 
   if (pathname === "/admin/login" || pathname === "/admin/login/") {
+    return legacyAdminRedirect(request);
+  }
+
+  if (pathname === "/xxx" || pathname === "/xxx/") {
     return NextResponse.rewrite(new URL("/admin-panel.html", request.url));
   }
 

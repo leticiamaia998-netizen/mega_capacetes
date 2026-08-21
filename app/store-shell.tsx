@@ -1,4 +1,4 @@
-const BOOT_VERSION = "34";
+const BOOT_VERSION = "36";
 
 export function StoreShell() {
   return (
