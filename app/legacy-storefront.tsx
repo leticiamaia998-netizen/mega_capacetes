@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 const APP_SCRIPT_ID = "stormzx-storefront-script";
-const ENHANCEMENTS_VERSION = "10";
+const ENHANCEMENTS_VERSION = "11";
 
 declare global {
   interface Window {
@@ -98,6 +98,37 @@ function asRecord(value: unknown) {
     : {};
 }
 
+function readCartItems() {
+  try {
+    const cart = JSON.parse(localStorage.getItem("cart") || "[]");
+    if (!Array.isArray(cart)) return [];
+    return cart
+      .filter((item) => item && typeof item === "object")
+      .map((item) => {
+        const row = item as Record<string, unknown>;
+        return {
+          id: row.id,
+          name: row.name || "Produto",
+          image: row.image || "",
+          price: Number(row.price) || 0,
+          originalPrice: Number(row.originalPrice) || Number(row.price) || 0,
+          quantity: Number(row.quantity) || 1,
+          size: row.size || "Único",
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
+function itemsLookGeneric(items: unknown[]) {
+  if (!items.length) return true;
+  return items.every((item) => {
+    const row = asRecord(item);
+    return !row.image && (!row.name || row.name === "Pedido");
+  });
+}
+
 function enrichPixCreateInit(init?: RequestInit): RequestInit | undefined {
   if (!init?.body || typeof init.body !== "string") return init;
   try {
@@ -114,7 +145,14 @@ function enrichPixCreateInit(init?: RequestInit): RequestInit | undefined {
     const amount = Number(parsed.amount || snap.amount || 0);
     const parsedItems = Array.isArray(parsed.items) ? parsed.items : [];
     const snapItems = Array.isArray(snap.items) ? snap.items : [];
-    const items = parsedItems.length ? parsedItems : snapItems.length ? snapItems : [{ name: "Pedido", quantity: 1, price: amount }];
+    const cartItems = readCartItems();
+    const items = !itemsLookGeneric(parsedItems)
+      ? parsedItems
+      : !itemsLookGeneric(snapItems)
+        ? snapItems
+        : cartItems.length
+          ? cartItems
+          : [{ name: "Pedido", quantity: 1, price: amount }];
     return {
       ...init,
       body: JSON.stringify({

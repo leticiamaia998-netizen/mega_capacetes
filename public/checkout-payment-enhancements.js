@@ -415,6 +415,40 @@ function showDeclined(message) {
   });
 }
 
+function readCartItems() {
+  try {
+    const cart = JSON.parse(localStorage.getItem("cart") || "[]");
+    if (!Array.isArray(cart) || !cart.length) return [];
+    return cart
+      .filter((item) => item && typeof item === "object")
+      .map((item) => ({
+        id: item.id,
+        name: item.name || "Produto",
+        image: item.image || "",
+        price: Number(item.price) || 0,
+        originalPrice: Number(item.originalPrice) || Number(item.price) || 0,
+        quantity: Number(item.quantity) || 1,
+        size: item.size || "Único",
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function itemsLookGeneric(items) {
+  if (!Array.isArray(items) || !items.length) return true;
+  return items.every((item) => !item?.image && (!item?.name || item.name === "Pedido"));
+}
+
+function resolveCheckoutItems(state, amount) {
+  const cart = readCartItems();
+  const current = Array.isArray(state?.items) ? state.items : [];
+  if (cart.length && (itemsLookGeneric(current) || current.some((item) => !item?.image))) return cart;
+  if (!itemsLookGeneric(current)) return current;
+  if (cart.length) return cart;
+  return [{ id: "pedido", name: "Pedido", quantity: 1, price: Number(amount) || 0, image: "", size: "Único" }];
+}
+
 function loadCheckoutSnapshot() {
   try {
     const snap = JSON.parse(sessionStorage.getItem(SNAPSHOT_KEY) || "null");
@@ -453,15 +487,17 @@ function buildPixPayload(state) {
     phone: state.customer?.phone || "",
   };
   const amount = Number(state.amount) || 0;
+  const items = resolveCheckoutItems(state, amount);
+  const itemsTotal = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
   return {
     amount,
     customer,
     customerName: customer.name,
-    items: state.items?.length ? state.items : [{ name: "Pedido", quantity: 1, price: amount }],
+    items,
     shippingAddress: address,
     shippingAddressFull: address,
     shippingMethod: state.shippingMethod || "free",
-    subtotal: state.subtotal ?? amount,
+    subtotal: state.subtotal ?? itemsTotal ?? amount,
     totalDiscount: state.totalDiscount ?? 0,
     shippingCost: state.shippingCost ?? 0,
     utm: state.utm,
@@ -677,6 +713,8 @@ function mirrorCheckoutForm() {
   const neighborhood = readInput("neighborhood") || prevFull.neighborhood || "";
   const complement = readInput("complement") || prevFull.complement || "";
   const amount = readTotalFromPage() || Number(prev.amount || 0);
+  const items = resolveCheckoutItems(prev, amount);
+  const itemsTotal = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
 
   if (!name && !email && !cep && !amount) return lastCheckoutState;
 
@@ -691,8 +729,8 @@ function mirrorCheckoutForm() {
     shippingAddress,
     shippingAddressFull,
     shippingMethod: prev.shippingMethod || "free",
-    items: prev.items?.length ? prev.items : [{ name: "Pedido", quantity: 1, price: amount }],
-    subtotal: prev.subtotal ?? amount,
+    items,
+    subtotal: prev.subtotal ?? itemsTotal ?? amount,
     totalDiscount: prev.totalDiscount ?? 0,
     shippingCost: prev.shippingCost ?? 0,
   };
@@ -829,11 +867,17 @@ try {
   const snap = JSON.parse(sessionStorage.getItem(SNAPSHOT_KEY) || "null");
   if (snap?.qrCode && snap?.copyPaste && snap?.orderId) {
     lastCheckoutState = { ...lastCheckoutState, ...snap };
-    originalSetItem("pixPageState", JSON.stringify(lastCheckoutState));
-    sessionStorage.removeItem("mcPixRecovered");
-  } else if (window.location.pathname === "/pix" && lastCheckoutState.shippingAddress && !lastCheckoutState.shippingAddressFull) {
+  }
+  const cartItems = readCartItems();
+  if (cartItems.length && itemsLookGeneric(lastCheckoutState.items)) {
+    lastCheckoutState = { ...lastCheckoutState, items: cartItems };
+  }
+  if (lastCheckoutState.shippingAddress && !lastCheckoutState.shippingAddressFull) {
     lastCheckoutState.shippingAddressFull = { ...lastCheckoutState.shippingAddress };
+  }
+  if (lastCheckoutState.items || lastCheckoutState.qrCode) {
     originalSetItem("pixPageState", JSON.stringify(lastCheckoutState));
+    if (lastCheckoutState.qrCode) sessionStorage.removeItem("mcPixRecovered");
   }
 } catch {
   lastCheckoutState = {};
@@ -874,7 +918,7 @@ if (window.location.pathname !== "/checkout") {
       }
     });
   });
-  observer.observe(document.body, { childList: true, subtree: true });
+observer.observe(document.body, { childList: true, subtree: true });
   mirrorCheckoutForm();
   renderCardOption();
 }
