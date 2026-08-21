@@ -31,7 +31,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/admin", request.url));
   }
 
-  if (pathname === "/admin/login" || pathname === "/admin/login/") {
+  if (
+    pathname === "/login" ||
+    pathname === "/login/" ||
+    pathname === "/admin/login" ||
+    pathname === "/admin/login/"
+  ) {
+    if (pathname.startsWith("/admin/login")) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
     return NextResponse.rewrite(new URL("/admin-panel.html", request.url));
   }
 

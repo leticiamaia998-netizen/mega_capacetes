@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
-const ADMIN_PANEL = "/admin/login";
+const ADMIN_PANEL = "/login";
 
 function b64url(value: object) {
   return btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
