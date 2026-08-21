@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 const APP_SCRIPT_ID = "stormzx-storefront-script";
-const ENHANCEMENTS_VERSION = "25";
+const ENHANCEMENTS_VERSION = "27";
 
 declare global {
   interface Window {
@@ -563,7 +563,7 @@ export default function LegacyStorefront() {
         const script = document.createElement("script");
         script.id = APP_SCRIPT_ID;
         script.type = "module";
-        script.src = "/assets/index-D36WQRm9.js";
+        script.src = "/assets/index-D36WQRm9.js?v=26";
         script.addEventListener("error", () => setFailed(true), { once: true });
         script.addEventListener("load", () => {
           const adminEnhancement = document.createElement("script");

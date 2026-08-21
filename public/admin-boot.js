@@ -1,6 +1,6 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
-  const ENHANCEMENTS_VERSION = "26";
+  const ENHANCEMENTS_VERSION = "27";
   const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
   const ADMIN_STATUS = ["pending", "paid", "cancelled", "refunded"];
   const ADMIN_REST_TABLES = new Set([
@@ -349,7 +349,7 @@
     const script = document.createElement("script");
     script.id = APP_SCRIPT_ID;
     script.type = "module";
-    script.src = "/assets/index-D36WQRm9.js";
+    script.src = "/assets/index-D36WQRm9.js?v=26";
     script.addEventListener("error", () => showError("Não foi possível carregar o painel. Atualize a página."), {
       once: true,
     });
