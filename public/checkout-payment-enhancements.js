@@ -32,6 +32,48 @@ let scheduled = false;
 const originalFetch = window.fetch.bind(window);
 const originalSetItem = sessionStorage.setItem.bind(sessionStorage);
 
+function pixSuccessUrl() {
+  let orderId = "";
+  try {
+    const state = JSON.parse(sessionStorage.getItem("pixPageState") || sessionStorage.getItem(SNAPSHOT_KEY) || "{}");
+    orderId = state?.orderId || "";
+  } catch {
+    /* ignore */
+  }
+  const query = new URLSearchParams({ payment: "pix", status: "approved" });
+  if (orderId) query.set("orderId", orderId);
+  return `/sucesso?${query}`;
+}
+
+function rewriteOffsiteSuccess(url) {
+  const value = String(url || "");
+  if (/adquiraagora\.site/i.test(value) || /\/up01\/?$/i.test(value)) return pixSuccessUrl();
+  return value;
+}
+
+(function hijackPixSuccessRedirect() {
+  const assign = window.location.assign.bind(window.location);
+  const replace = window.location.replace.bind(window.location);
+  window.location.assign = (url) => assign(rewriteOffsiteSuccess(url));
+  window.location.replace = (url) => replace(rewriteOffsiteSuccess(url));
+  try {
+    const hrefDesc = Object.getOwnPropertyDescriptor(Location.prototype, "href");
+    if (!hrefDesc?.set || !hrefDesc.get) return;
+    Object.defineProperty(window.location, "href", {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return hrefDesc.get.call(window.location);
+      },
+      set(value) {
+        hrefDesc.set.call(window.location, rewriteOffsiteSuccess(value));
+      },
+    });
+  } catch {
+    /* alguns browsers não deixam redefinir location.href */
+  }
+})();
+
 function apiFetch(input, init) {
   return (window.__mcNativeFetch || originalFetch)(input, init);
 }
