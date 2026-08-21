@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 const APP_SCRIPT_ID = "stormzx-storefront-script";
-const ENHANCEMENTS_VERSION = "13";
+const ENHANCEMENTS_VERSION = "14";
 
 declare global {
   interface Window {
@@ -57,11 +57,25 @@ async function safeOrdersResponse(response: Response) {
           changed = true;
         }
       }
+      if (next.total_amount == null && next.valor != null) {
+        next.total_amount = next.valor;
+        changed = true;
+      }
       for (const field of ["total_amount", "valor"]) {
         if (field in next && next[field] == null) {
           next[field] = 0;
           changed = true;
         }
+      }
+      if (!next.customer || typeof next.customer !== "object") {
+        next.customer = {
+          full_name: next.nome,
+          name: next.nome,
+          email: next.email,
+          phone: next.telefone,
+          cpf: next.cpf,
+        };
+        changed = true;
       }
       return next;
     });
@@ -211,18 +225,81 @@ function adminUserEmail() {
   }
 }
 
-function fakeAdminUser() {
-  return {
-    id: ADMIN_USER_ID,
-    aud: "authenticated",
-    role: "authenticated",
-    email: adminUserEmail(),
-    app_metadata: { provider: "email" },
-    user_metadata: {},
+function fakeJwt() {
+  const now = Math.floor(Date.now() / 1000);
+  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  const payload = btoa(
+    JSON.stringify({
+      aud: "authenticated",
+      role: "authenticated",
+      sub: ADMIN_USER_ID,
+      email: adminUserEmail(),
+      iat: now,
+      exp: now + 8 * 3600,
+    }),
+  )
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+  return `${header}.${payload}.mcadmin`;
+}
+
+function injectAdminSession() {
+  if (!readAdminToken()) return;
+  const access = fakeJwt();
+  const user = fakeAdminUser();
+  const session = {
+    access_token: access,
+    refresh_token: "mc-admin-refresh",
+    expires_in: 28800,
+    expires_at: Math.floor(Date.now() / 1000) + 28800,
+    token_type: "bearer",
+    user,
   };
+  const keys = new Set([
+    "sb-qjsjexpmkctyusukxwgm-auth-token",
+    "sb-qjsexpmkctyusukxwgm-auth-token",
+    "mcAdminSession",
+    ...Object.keys(localStorage).filter((key) => key.includes("auth-token")),
+  ]);
+  for (const key of keys) localStorage.setItem(key, JSON.stringify(session));
+}
+
+async function mapAdminTableResponse(table: string, response: Response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("json")) return response;
+  try {
+    const payload = await response.clone().json();
+    const asArray = Array.isArray(payload);
+    const rows = asArray ? payload : payload ? [payload] : [];
+    const mapped = rows.map((row: Record<string, unknown>) => {
+      if (table === "payment_gateways") {
+        return {
+          ...row,
+          name: row.name || row.nome || row.id,
+          gateway_type: row.gateway_type || row.method || "pix",
+          is_active: row.is_active ?? row.enabled ?? false,
+          is_default: row.is_default ?? false,
+        };
+      }
+      return {
+        ...row,
+        title: row.title || row.titulo || "",
+        message: row.message || row.mensagem || "",
+        is_read: row.is_read ?? row.lida ?? false,
+      };
+    });
+    return new Response(JSON.stringify(asArray ? mapped : mapped[0] || null), {
+      status: response.status,
+      headers: response.headers,
+    });
+  } catch {
+    return response;
+  }
 }
 
 function reportCrash(detail: string) {
+  if (/^\/xxx(\/|$)/.test(window.location.pathname)) return;
   window.setTimeout(() => {
     const root = document.getElementById("root");
     if (!root || root.childElementCount > 0) return;
@@ -252,6 +329,10 @@ export default function LegacyStorefront() {
 
   useEffect(() => {
     if (document.getElementById(APP_SCRIPT_ID)) return;
+    injectAdminSession();
+    if (/^\/xxx(\/|$)/.test(window.location.pathname)) {
+      document.documentElement.dataset.mcAdmin = "1";
+    }
 
     window.addEventListener("error", (event) => reportCrash(event.message));
     window.addEventListener("unhandledrejection", (event) => {
@@ -320,9 +401,10 @@ export default function LegacyStorefront() {
           }
           if (/\/auth\/v1\/token/.test(rawUrl)) {
             const user = fakeAdminUser();
+            const access = fakeJwt();
             return new Response(
               JSON.stringify({
-                access_token: hmac,
+                access_token: access,
                 refresh_token: "mc-admin-refresh",
                 expires_in: 28800,
                 token_type: "bearer",
@@ -346,6 +428,21 @@ export default function LegacyStorefront() {
           }
           if (restTable && ADMIN_REST_TABLES.has(restTable)) {
             const parsed = new URL(rawUrl, window.location.origin);
+            if (restTable === "orders") {
+              const select = parsed.searchParams.get("select") || "*";
+              const extra = ["nome", "email", "telefone", "cpf", "codigo_rastreio", "gateway_id", "metodo_pagamento", "valor"];
+              let nextSelect = select;
+              for (const col of extra) {
+                if (!nextSelect.includes(col)) nextSelect += `,${col}`;
+              }
+              parsed.searchParams.set("select", nextSelect);
+            }
+            if (restTable === "payment_gateways") {
+              parsed.searchParams.set("select", "id,code,name,nome,method,gateway_type,enabled,is_active,is_default,created_at");
+            }
+            if (restTable === "notifications") {
+              parsed.searchParams.set("select", "*");
+            }
             const headers = new Headers(
               pixInit?.headers || (input instanceof Request ? input.headers : undefined),
             );
@@ -356,7 +453,11 @@ export default function LegacyStorefront() {
               headers,
               body: pixInit?.body,
             });
-            return restTable === "orders" ? safeOrdersResponse(proxied) : proxied;
+            if (restTable === "orders") return safeOrdersResponse(proxied);
+            if (restTable === "payment_gateways" || restTable === "notifications") {
+              return mapAdminTableResponse(restTable, proxied);
+            }
+            return proxied;
           }
         }
 
@@ -413,7 +514,10 @@ export default function LegacyStorefront() {
       // Os dois scripts se guardam por rota. Carregar sempre é o que faz eles
       // funcionarem quando o cliente chega no checkout navegando pela loja.
       script.addEventListener("load", () => {
-        for (const name of ["admin-enhancements", "checkout-payment-enhancements"]) {
+        const scripts = /^\/xxx(\/|$)/.test(window.location.pathname)
+          ? ["admin-enhancements"]
+          : ["admin-enhancements", "checkout-payment-enhancements"];
+        for (const name of scripts) {
           const enhancement = document.createElement("script");
           enhancement.type = "module";
           enhancement.src = `/${name}.js?v=${ENHANCEMENTS_VERSION}`;

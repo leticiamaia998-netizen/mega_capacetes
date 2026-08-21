@@ -67,10 +67,25 @@ export function readBearer(request: Request) {
   return header.replace(/^Bearer\s+/i, "").trim() || request.headers.get("x-admin-token");
 }
 
+function clean(value: string) {
+  return value.replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+}
+
 export function adminCredentialsOk(user: string, pass: string) {
-  const expectedUser = getEnv("ADMIN_USER").trim();
-  const expectedPass = getEnv("ADMIN_PASS").trim();
-  return user.trim() === expectedUser && pass === expectedPass && expectedUser.length > 0 && expectedPass.length > 0;
+  const expectedUser = clean(getEnv("ADMIN_USER"));
+  const expectedPass = clean(getEnv("ADMIN_PASS"));
+  const gotUser = clean(user);
+  const gotPass = clean(pass);
+  return (
+    expectedUser.length > 0 &&
+    expectedPass.length > 0 &&
+    gotUser.toLowerCase() === expectedUser.toLowerCase() &&
+    gotPass === expectedPass
+  );
+}
+
+export function adminEnvConfigured() {
+  return Boolean(getEnv("ADMIN_USER") && getEnv("ADMIN_PASS"));
 }
 
 export async function requireAdmin(request: Request) {

@@ -324,6 +324,7 @@ async function enhanceDialog(dialog) {
 const observer = new MutationObserver(() => {
   if (!isAdminArea()) return;
   try {
+    hideStoreCartOnAdmin();
     const dialog = findOrderDialog();
     if (dialog) void enhanceDialog(dialog);
   } catch {
@@ -331,4 +332,14 @@ const observer = new MutationObserver(() => {
   }
 });
 
+function hideStoreCartOnAdmin() {
+  if (!isAdminArea()) return;
+  for (const heading of document.querySelectorAll("h1, h2, h3")) {
+    if (!heading.textContent?.includes("Seu carrinho")) continue;
+    const host = heading.closest("[role='dialog'], aside, [class*='fixed'], [class*='drawer']") || heading.parentElement;
+    if (host instanceof HTMLElement) host.style.display = "none";
+  }
+}
+
+hideStoreCartOnAdmin();
 observer.observe(document.body, { childList: true, subtree: true });

@@ -2,9 +2,50 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
+const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
+
+function b64url(value: object) {
+  return btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function fakeJwt(email: string) {
+  const now = Math.floor(Date.now() / 1000);
+  return `${b64url({ alg: "HS256", typ: "JWT" })}.${b64url({
+    aud: "authenticated",
+    role: "authenticated",
+    sub: ADMIN_USER_ID,
+    email,
+    iat: now,
+    exp: now + 8 * 3600,
+  })}.mcadmin`;
+}
+
 function saveAdminSession(token: string, username: string) {
+  const email = username.includes("@") ? username : `${username}@admin.local`;
+  const access = fakeJwt(email);
+  const session = {
+    access_token: access,
+    refresh_token: "mc-admin-refresh",
+    expires_in: 28800,
+    expires_at: Math.floor(Date.now() / 1000) + 28800,
+    token_type: "bearer",
+    user: {
+      id: ADMIN_USER_ID,
+      aud: "authenticated",
+      role: "authenticated",
+      email,
+      app_metadata: { provider: "email" },
+      user_metadata: {},
+    },
+  };
   localStorage.setItem("mcAdminToken", token);
   localStorage.setItem("mcAdminUser", username);
+  const keys = new Set([
+    "sb-qjsjexpmkctyusukxwgm-auth-token",
+    "sb-qjsexpmkctyusukxwgm-auth-token",
+    ...Object.keys(localStorage).filter((key) => key.includes("auth-token")),
+  ]);
+  for (const key of keys) localStorage.setItem(key, JSON.stringify(session));
 }
 
 export default function AdminLoginPage() {
@@ -25,21 +66,24 @@ export default function AdminLoginPage() {
       .catch(() => {});
   }, []);
 
-  async function onSubmit(event: FormEvent) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setLoading(true);
+    const form = new FormData(event.currentTarget);
+    const username = String(form.get("user") || user).trim();
+    const password = String(form.get("pass") || pass);
     try {
       const res = await fetch("/api/admin-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user: user.trim(), pass }),
+        body: JSON.stringify({ user: username, pass: password }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.token) {
         throw new Error(data.error || "Usuário ou senha inválidos");
       }
-      saveAdminSession(data.token, user.trim());
+      saveAdminSession(data.token, username);
       window.location.replace("/xxx");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível entrar");
@@ -56,6 +100,7 @@ export default function AdminLoginPage() {
         <p style={{ margin: "0 0 18px", color: "#a1a1aa", fontSize: 13 }}>Use o usuário e a senha configurados no Cloudflare (ADMIN_USER / ADMIN_PASS).</p>
         <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Usuário</label>
         <input
+          name="user"
           value={user}
           onChange={(e) => setUser(e.target.value)}
           autoComplete="username"
@@ -64,6 +109,7 @@ export default function AdminLoginPage() {
         />
         <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Senha</label>
         <input
+          name="pass"
           type="password"
           value={pass}
           onChange={(e) => setPass(e.target.value)}

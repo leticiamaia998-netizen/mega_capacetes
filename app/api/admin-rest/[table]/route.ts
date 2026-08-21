@@ -50,6 +50,33 @@ async function proxy(request: Request, table: string) {
       headers,
       body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.text(),
     });
+
+    if (!res.ok && request.method === "GET") {
+      const text = await res.text();
+      const column = text.match(/Could not find the '([^']+)' column/i)?.[1];
+      if (column) {
+        const next = new URL(request.url);
+        const select = next.searchParams.get("select") || "";
+        if (select) {
+          const filtered = select
+            .split(",")
+            .map((part) => part.trim())
+            .filter((part) => part && part !== column && !part.startsWith(`${column}:`) && !part.endsWith(`:${column}`));
+          next.searchParams.set("select", filtered.join(",") || "*");
+          const retryTarget = restTarget(table, next.search);
+          const retry = await fetch(retryTarget.dest, { method: "GET", headers: { ...headers, ...retryTarget.headers } });
+          const retryOut = new Headers();
+          for (const name of ["content-type", "content-range", "preference-applied", "location"]) {
+            const value = retry.headers.get(name);
+            if (value) retryOut.set(name, value);
+          }
+          retryOut.set("Access-Control-Allow-Origin", "*");
+          retryOut.set("Cache-Control", "no-store");
+          return new Response(await retry.arrayBuffer(), { status: retry.status, headers: retryOut });
+        }
+      }
+      return new Response(text, { status: res.status, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+    }
     const out = new Headers();
     for (const name of ["content-type", "content-range", "preference-applied", "location"]) {
       const value = res.headers.get(name);

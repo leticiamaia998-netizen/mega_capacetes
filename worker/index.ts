@@ -1,5 +1,6 @@
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { withRequestEnv } from "../lib/store/env";
 
 interface Env {
   ASSETS: Fetcher;
@@ -11,6 +12,7 @@ interface Env {
       };
     };
   };
+  [key: string]: unknown;
 }
 
 interface ExecutionContext {
@@ -33,7 +35,7 @@ const worker = {
       }, allowedWidths);
     }
 
-    return handler.fetch(request, env, ctx);
+    return withRequestEnv(env, () => handler.fetch(request, env, ctx));
   },
 };
 

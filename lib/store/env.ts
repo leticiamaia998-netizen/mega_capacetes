@@ -1,9 +1,20 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 type WorkerEnv = {
   PIX_RATELIMIT?: KVNamespace;
   [key: string]: unknown;
 };
 
+const requestEnv = new AsyncLocalStorage<WorkerEnv>();
+
+export function withRequestEnv<T>(env: WorkerEnv, run: () => T) {
+  return requestEnv.run(env, run);
+}
+
 function workersEnv(): WorkerEnv {
+  const fromRequest = requestEnv.getStore();
+  if (fromRequest && typeof fromRequest === "object") return fromRequest;
+
   try {
     const processWithBuiltins = process as NodeJS.Process & {
       getBuiltinModule?: (id: string) => { env?: WorkerEnv } | undefined;
@@ -16,11 +27,25 @@ function workersEnv(): WorkerEnv {
   return {};
 }
 
-export function getEnv(name: string, fallback = ""): string {
-  const fromCf = workersEnv()[name];
-  if (typeof fromCf === "string" && fromCf.length > 0) return fromCf;
-  const fromProcess = process.env[name];
-  if (fromProcess && fromProcess.length > 0) return fromProcess;
+function asText(value: unknown) {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
+}
+
+export function getEnv(name: string, fallback = "") {
+  const env = workersEnv();
+  const aliases: Record<string, string[]> = {
+    ADMIN_USER: ["ADMIN_USER", "ADMIN_USERNAME", "ADMIN_LOGIN"],
+    ADMIN_PASS: ["ADMIN_PASS", "ADMIN_PASSWORD", "ADMIN_SENHA"],
+  };
+  const keys = aliases[name] || [name];
+  for (const key of keys) {
+    const fromCf = asText(env[key]).trim();
+    if (fromCf) return fromCf;
+    const fromProcess = String(process.env[key] || "").trim();
+    if (fromProcess) return fromProcess;
+  }
   return fallback;
 }
 
