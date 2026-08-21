@@ -21,7 +21,7 @@ export default function AdminPanelPage() {
           <p>Carregando painel...</p>
         </main>
       </div>
-      <script src="/admin-boot.js?v=24" defer />
+      <script src="/admin-boot.js?v=25" defer />
     </>
   );
 }

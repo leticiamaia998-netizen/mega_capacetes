@@ -1,6 +1,6 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
-  const ENHANCEMENTS_VERSION = "24";
+  const ENHANCEMENTS_VERSION = "25";
   const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
   const ADMIN_STATUS = ["pending", "paid", "cancelled", "refunded"];
   const ADMIN_REST_TABLES = new Set([
