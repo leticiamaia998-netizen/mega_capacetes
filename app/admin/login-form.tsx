@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
-const ADMIN_HOME = "/admin";
+const ADMIN_PANEL = "/admin/login";
 
 function b64url(value: object) {
   return btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -61,7 +61,7 @@ export default function LoginForm() {
     void fetch("/api/admin-verify", { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
       .then((data) => {
-        if (data?.valid || data?.success) window.location.replace(ADMIN_HOME);
+        if (data?.valid || data?.success) window.location.replace(ADMIN_PANEL);
         else localStorage.removeItem("mcAdminToken");
       })
       .catch(() => {});
@@ -85,7 +85,7 @@ export default function LoginForm() {
         throw new Error(data.error || "Usuário ou senha inválidos");
       }
       saveAdminSession(data.token, username);
-      window.location.replace(ADMIN_HOME);
+      window.location.replace(ADMIN_PANEL);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível entrar");
     } finally {

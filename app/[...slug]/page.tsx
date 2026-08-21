@@ -14,7 +14,7 @@ export default async function StorefrontRoute({ params }: StorefrontRouteProps) 
   }
 
   if (pathname === "/xxx/login") {
-    redirect("/admin/login");
+    redirect("/admin");
   }
 
   return <LegacyStorefront />;

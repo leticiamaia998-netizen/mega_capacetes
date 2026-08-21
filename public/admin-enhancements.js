@@ -23,7 +23,7 @@ function escapeHtml(value) {
 }
 
 function isAdminArea() {
-  return /^\/admin(\/|$)/.test(window.location.pathname);
+  return /^\/admin\/login(\/|$)/.test(window.location.pathname);
 }
 
 function getAccessToken() {

@@ -1,6 +1,6 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
-  const ENHANCEMENTS_VERSION = "22";
+  const ENHANCEMENTS_VERSION = "23";
   const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
   const ADMIN_STATUS = ["pending", "paid", "cancelled", "refunded"];
   const ADMIN_REST_TABLES = new Set([
@@ -347,7 +347,7 @@
   const SPA_ADMIN_ROUTES =
     'v.jsx(Se,{path:"/xxx/login",element:v.jsx(HP,{})}),v.jsx(Se,{path:"/xxx",element:v.jsx(KP,{})})';
   const SPA_ADMIN_ROUTES_PATCHED =
-    'v.jsx(Se,{path:"/admin/login",element:v.jsx(HP,{})}),v.jsx(Se,{path:"/admin",element:v.jsx(KP,{})}),v.jsx(Se,{path:"/xxx/login",element:v.jsx(HP,{})}),v.jsx(Se,{path:"/xxx",element:v.jsx(KP,{})})';
+    'v.jsx(Se,{path:"/admin/login",element:v.jsx(KP,{})}),v.jsx(Se,{path:"/xxx/login",element:v.jsx(HP,{})}),v.jsx(Se,{path:"/xxx",element:v.jsx(KP,{})})';
 
   async function loadSpa() {
     if (document.getElementById(APP_SCRIPT_ID)) return;
@@ -357,10 +357,10 @@
     try {
       const res = await fetch("/assets/index-D36WQRm9.js", { cache: "no-store" });
       let code = await res.text();
-      if (code.includes(SPA_ADMIN_ROUTES) && !code.includes('path:"/admin"')) {
+      if (code.includes(SPA_ADMIN_ROUTES) && !code.includes('path:"/admin/login",element:v.jsx(KP')) {
         code = code.replace(SPA_ADMIN_ROUTES, SPA_ADMIN_ROUTES_PATCHED);
       }
-      code = code.replace(/N\("\/xxx"\)/g, 'N("/admin")');
+      code = code.replace(/N\("\/xxx"\)/g, 'N("/admin/login")');
       script.src = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
     } catch {
       script.src = "/assets/index-D36WQRm9.js";
@@ -389,7 +389,7 @@
 
     const token = readAdminToken();
     if (!token) {
-      window.location.replace("/admin/login");
+      window.location.replace("/admin");
       return;
     }
 
@@ -400,7 +400,7 @@
       if (!verify?.valid && !verify?.success) {
         localStorage.removeItem("mcAdminToken");
         localStorage.removeItem("mcAdminUser");
-        window.location.replace("/admin/login");
+        window.location.replace("/admin");
         return;
       }
     } catch {
