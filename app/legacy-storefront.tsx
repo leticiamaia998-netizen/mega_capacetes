@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 const APP_SCRIPT_ID = "stormzx-storefront-script";
-const ENHANCEMENTS_VERSION = "14";
+const ENHANCEMENTS_VERSION = "15";
 
 declare global {
   interface Window {
@@ -225,6 +225,17 @@ function adminUserEmail() {
   }
 }
 
+function fakeAdminUser() {
+  return {
+    id: ADMIN_USER_ID,
+    aud: "authenticated",
+    role: "authenticated",
+    email: adminUserEmail(),
+    app_metadata: { provider: "email" },
+    user_metadata: {},
+  };
+}
+
 function fakeJwt() {
   const now = Math.floor(Date.now() / 1000);
   const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -325,17 +336,56 @@ function reportCrash(detail: string) {
 
 export default function LegacyStorefront() {
   const [failed, setFailed] = useState(false);
+  const [booting, setBooting] = useState(() =>
+    typeof window !== "undefined" && /^\/xxx(\/|$)/.test(window.location.pathname),
+  );
 
   useEffect(() => {
-    if (/^\/xxx(\/|$)/.test(window.location.pathname) && !readAdminToken()) {
+    const isAdmin = /^\/xxx(\/|$)/.test(window.location.pathname);
+    if (isAdmin) {
+      document.documentElement.style.background = "#09090b";
+      document.body.style.background = "#09090b";
+      document.body.style.color = "#fff";
+      document.documentElement.dataset.mcAdmin = "1";
+    }
+
+    const token = readAdminToken();
+    if (isAdmin && !token) {
       window.location.replace("/xxx/login");
       return;
     }
-    if (document.getElementById(APP_SCRIPT_ID)) return;
-    injectAdminSession();
-    if (/^\/xxx(\/|$)/.test(window.location.pathname)) {
-      document.documentElement.dataset.mcAdmin = "1";
+
+    if (isAdmin && token) {
+      let cancelled = false;
+      void fetch("/api/admin-verify", { headers: { Authorization: `Bearer ${token}` } })
+        .then((res) => res.json())
+        .then((data) => {
+          if (cancelled) return;
+          if (!data?.valid && !data?.success) {
+            localStorage.removeItem("mcAdminToken");
+            localStorage.removeItem("mcAdminUser");
+            window.location.replace("/xxx/login");
+            return;
+          }
+          setBooting(false);
+          startStorefront();
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setBooting(false);
+            startStorefront();
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
     }
+
+    startStorefront();
+
+    function startStorefront() {
+      if (document.getElementById(APP_SCRIPT_ID)) return;
+      injectAdminSession();
 
     window.addEventListener("error", (event) => reportCrash(event.message));
     window.addEventListener("unhandledrejection", (event) => {
@@ -529,10 +579,25 @@ export default function LegacyStorefront() {
       }, { once: true });
       document.body.appendChild(script);
     })();
+    }
   }, []);
 
   return (
-    <div id="root">
+    <div id="root" style={booting ? { minHeight: "100vh", background: "#09090b", color: "#fff" } : undefined}>
+      {booting ? (
+        <main
+          style={{
+            minHeight: "100vh",
+            display: "grid",
+            placeItems: "center",
+            background: "#09090b",
+            color: "#fff",
+            fontFamily: "system-ui, Segoe UI, Arial, sans-serif",
+          }}
+        >
+          <p style={{ margin: 0, fontSize: 14, color: "#a1a1aa" }}>Carregando painel...</p>
+        </main>
+      ) : null}
       {failed ? (
         <main className="storefront-error" role="alert">
           <p>Não foi possível carregar a loja. Atualize a página para tentar novamente.</p>

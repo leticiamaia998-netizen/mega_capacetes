@@ -1,3 +1,9 @@
+html[data-mc-admin="1"],
+html[data-mc-admin="1"] body {
+  background: #09090b !important;
+  color: #fff !important;
+}
+
 html,
 body {
   min-height: 100%;
