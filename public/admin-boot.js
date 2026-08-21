@@ -1,6 +1,6 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
-  const ENHANCEMENTS_VERSION = "27";
+  const ENHANCEMENTS_VERSION = "28";
   const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
   const ADMIN_STATUS = ["pending", "paid", "cancelled", "refunded"];
   const ADMIN_REST_TABLES = new Set([
@@ -346,6 +346,10 @@
 
   function loadSpa() {
     if (document.getElementById(APP_SCRIPT_ID)) return;
+    const loading = document.getElementById("mc-admin-loading");
+    if (loading) loading.remove();
+    const root = document.getElementById("root");
+    if (root) root.replaceChildren();
     const script = document.createElement("script");
     script.id = APP_SCRIPT_ID;
     script.type = "module";

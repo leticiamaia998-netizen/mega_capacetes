@@ -16,12 +16,11 @@ export default function AdminPanelPage() {
           __html: `(function(){try{if(!localStorage.getItem("mcAdminToken"))location.replace("/admin");}catch(e){location.replace("/admin");}})();`,
         }}
       />
-      <div id="root">
-        <main id="mc-admin-loading">
-          <p>Carregando painel...</p>
-        </main>
-      </div>
-      <script src="/admin-boot.js?v=27" defer />
+      <main id="mc-admin-loading">
+        <p>Carregando painel...</p>
+      </main>
+      <div id="root" />
+      <script src="/admin-boot.js?v=28" defer />
     </>
   );
 }
