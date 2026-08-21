@@ -24,6 +24,19 @@ const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    if (url.pathname === "/admin/login" || url.pathname === "/admin/login/") {
+      const asset = await env.ASSETS.fetch(new Request(new URL("/admin-panel.html", request.url), request));
+      if (asset.ok) {
+        return new Response(asset.body, {
+          status: asset.status,
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-store",
+          },
+        });
+      }
+    }
+
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       return handleImageOptimization(request, {

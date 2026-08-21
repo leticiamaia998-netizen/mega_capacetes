@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MegaCapacetes — Admin</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #09090b;
+        color: #fff;
+      }
+      #root {
+        min-height: 100vh;
+        background: #09090b;
+      }
+      #mc-admin-loading {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #09090b;
+        font-family: system-ui, Segoe UI, Arial, sans-serif;
+      }
+      #mc-admin-loading p {
+        color: #a1a1aa;
+        margin: 0;
+        font-size: 14px;
+      }
+    </style>
+    <script>
+      (function () {
+        try {
+          if (!localStorage.getItem("mcAdminToken")) location.replace("/admin");
+        } catch (e) {
+          location.replace("/admin");
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <main id="mc-admin-loading">
+      <p>Carregando painel...</p>
+    </main>
+    <div id="root"></div>
+    <script src="/admin-boot.js?v=31" defer></script>
+  </body>
+</html>
