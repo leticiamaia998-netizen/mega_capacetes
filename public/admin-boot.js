@@ -1,6 +1,6 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
-  const ENHANCEMENTS_VERSION = "25";
+  const ENHANCEMENTS_VERSION = "26";
   const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
   const ADMIN_STATUS = ["pending", "paid", "cancelled", "refunded"];
   const ADMIN_REST_TABLES = new Set([
@@ -371,6 +371,12 @@
     document.documentElement.style.background = "#09090b";
     document.body.style.background = "#09090b";
     document.body.style.color = "#fff";
+
+    if (!/^\/admin\/login(\/|$)/.test(window.location.pathname)) {
+      const token = readAdminToken();
+      window.location.replace(token ? "/admin/login" : "/admin");
+      return;
+    }
 
     const token = readAdminToken();
     if (!token) {
