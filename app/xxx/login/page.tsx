@@ -1,19 +1,5 @@
-import LoginForm from "./login-form";
+import { redirect } from "next/navigation";
 
-export default function AdminLoginPage() {
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#09090b",
-        color: "#fff",
-        display: "grid",
-        placeItems: "center",
-        padding: 20,
-        fontFamily: "system-ui, Segoe UI, Arial, sans-serif",
-      }}
-    >
-      <LoginForm />
-    </div>
-  );
+export default function LegacyAdminLoginRedirect() {
+  redirect("/admin/login");
 }

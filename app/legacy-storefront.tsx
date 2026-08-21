@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 const APP_SCRIPT_ID = "stormzx-storefront-script";
-const ENHANCEMENTS_VERSION = "21";
+const ENHANCEMENTS_VERSION = "22";
 
 declare global {
   interface Window {
@@ -337,11 +337,11 @@ function reportCrash(detail: string) {
 export default function LegacyStorefront() {
   const [failed, setFailed] = useState(false);
   const [booting, setBooting] = useState(() =>
-    typeof window !== "undefined" && /^\/xxx(\/|$)/.test(window.location.pathname),
+    typeof window !== "undefined" && /^\/admin(\/|$)/.test(window.location.pathname),
   );
 
   useEffect(() => {
-    const isAdmin = /^\/xxx(\/|$)/.test(window.location.pathname);
+    const isAdmin = /^\/admin(\/|$)/.test(window.location.pathname);
     if (isAdmin) {
       document.documentElement.style.background = "#09090b";
       document.body.style.background = "#09090b";
@@ -351,7 +351,7 @@ export default function LegacyStorefront() {
 
     const token = readAdminToken();
     if (isAdmin && !token) {
-      window.location.replace("/xxx/login");
+      window.location.replace("/admin/login");
       return;
     }
 
@@ -364,7 +364,7 @@ export default function LegacyStorefront() {
           if (!data?.valid && !data?.success) {
             localStorage.removeItem("mcAdminToken");
             localStorage.removeItem("mcAdminUser");
-            window.location.replace("/xxx/login");
+            window.location.replace("/admin/login");
             return;
           }
           setBooting(false);
@@ -574,7 +574,7 @@ export default function LegacyStorefront() {
         document.body.appendChild(script);
       }
 
-      if (/^\/xxx(\/|$)/.test(window.location.pathname)) {
+      if (/^\/admin(\/|$)/.test(window.location.pathname)) {
         bootStorefront();
       } else {
         const cardEnhancement = document.createElement("script");

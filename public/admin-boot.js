@@ -1,6 +1,6 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
-  const ENHANCEMENTS_VERSION = "19";
+  const ENHANCEMENTS_VERSION = "22";
   const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
   const ADMIN_STATUS = ["pending", "paid", "cancelled", "refunded"];
   const ADMIN_REST_TABLES = new Set([
@@ -344,12 +344,27 @@
     Object.assign(window.WebSocket, OriginalWebSocket);
   }
 
-  function loadSpa() {
+  const SPA_ADMIN_ROUTES =
+    'v.jsx(Se,{path:"/xxx/login",element:v.jsx(HP,{})}),v.jsx(Se,{path:"/xxx",element:v.jsx(KP,{})})';
+  const SPA_ADMIN_ROUTES_PATCHED =
+    'v.jsx(Se,{path:"/admin/login",element:v.jsx(HP,{})}),v.jsx(Se,{path:"/admin",element:v.jsx(KP,{})}),v.jsx(Se,{path:"/xxx/login",element:v.jsx(HP,{})}),v.jsx(Se,{path:"/xxx",element:v.jsx(KP,{})})';
+
+  async function loadSpa() {
     if (document.getElementById(APP_SCRIPT_ID)) return;
     const script = document.createElement("script");
     script.id = APP_SCRIPT_ID;
     script.type = "module";
-    script.src = "/assets/index-D36WQRm9.js";
+    try {
+      const res = await fetch("/assets/index-D36WQRm9.js", { cache: "no-store" });
+      let code = await res.text();
+      if (code.includes(SPA_ADMIN_ROUTES) && !code.includes('path:"/admin"')) {
+        code = code.replace(SPA_ADMIN_ROUTES, SPA_ADMIN_ROUTES_PATCHED);
+      }
+      code = code.replace(/N\("\/xxx"\)/g, 'N("/admin")');
+      script.src = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+    } catch {
+      script.src = "/assets/index-D36WQRm9.js";
+    }
     script.addEventListener("error", () => showError("Não foi possível carregar o painel. Atualize a página."), {
       once: true,
     });
@@ -374,7 +389,7 @@
 
     const token = readAdminToken();
     if (!token) {
-      window.location.replace("/xxx/login");
+      window.location.replace("/admin/login");
       return;
     }
 
@@ -385,7 +400,7 @@
       if (!verify?.valid && !verify?.success) {
         localStorage.removeItem("mcAdminToken");
         localStorage.removeItem("mcAdminUser");
-        window.location.replace("/xxx/login");
+        window.location.replace("/admin/login");
         return;
       }
     } catch {
@@ -419,7 +434,7 @@
       .catch(() => ({ supabaseUrl: "", supabaseAnonKey: "" }));
 
     await setupFetchPatch(originalFetch, String(cfg.supabaseUrl || "").replace(/\/$/, ""), String(cfg.supabaseAnonKey || ""));
-    loadSpa();
+    await loadSpa();
   }
 
   if (document.readyState === "loading") {
