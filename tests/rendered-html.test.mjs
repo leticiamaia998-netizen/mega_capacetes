@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const developmentPreviewMeta =
@@ -30,4 +31,13 @@ test("renders development preview metadata", async () => {
     /^text\/html\b/i,
   );
   assert.match(await response.text(), developmentPreviewMeta);
+});
+
+test("admin bundle never redirects to the legacy xxx route", async () => {
+  const adminBundle = await readFile(
+    new URL("../public/assets/AdminDashboard-COd7Vnns.js", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(adminBundle, /\/xxx(?:\/login)?/);
 });
