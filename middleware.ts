@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 function wantsHtml(request: NextRequest) {
-  return (request.headers.get("accept") || "").includes("text/html");
+  const accept = request.headers.get("accept") || "";
+  if (accept.includes("text/html")) return true;
+  // Navegadores e ferramentas muitas vezes enviam */* em vez de text/html.
+  return accept.includes("*/*") && !accept.includes("application/json");
 }
 
 function isStaticAsset(pathname: string) {

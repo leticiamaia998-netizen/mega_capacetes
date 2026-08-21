@@ -1,5 +1,5 @@
-import LegacyStorefront from "./legacy-storefront";
+import { StoreShell } from "./store-shell";
 
 export default function Home() {
-  return <LegacyStorefront />;
+  return <StoreShell />;
 }

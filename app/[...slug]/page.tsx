@@ -1,6 +1,6 @@
-import LegacyStorefront from "../legacy-storefront";
 import AdminEntryPage from "../admin/page";
 import AdminPanelPage from "../admin/login/page";
+import { StoreShell } from "../store-shell";
 import { redirect } from "next/navigation";
 
 type StorefrontRouteProps = {
@@ -27,5 +27,5 @@ export default async function StorefrontRoute({ params }: StorefrontRouteProps) 
     return <AdminPanelPage />;
   }
 
-  return <LegacyStorefront />;
+  return <StoreShell />;
 }

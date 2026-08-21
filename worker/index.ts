@@ -22,7 +22,8 @@ interface ExecutionContext {
 
 function wantsHtml(request: Request) {
   const accept = request.headers.get("Accept") || "";
-  return accept.includes("text/html");
+  if (accept.includes("text/html")) return true;
+  return accept.includes("*/*") && !accept.includes("application/json");
 }
 
 function isStaticAssetPath(pathname: string) {

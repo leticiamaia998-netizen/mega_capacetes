@@ -1,6 +1,6 @@
 (function () {
   const APP_SCRIPT_ID = "stormzx-storefront-script";
-  const ENHANCEMENTS_VERSION = "33";
+  const ENHANCEMENTS_VERSION = "34";
 
   const FUNCTION_MAP = {
     "checkout-create-pix": "/api/pix/create",
@@ -350,20 +350,10 @@
     const script = document.createElement("script");
     script.id = APP_SCRIPT_ID;
     script.type = "module";
-    script.src = `/assets/index-D36WQRm9.js?v=${ENHANCEMENTS_VERSION}`;
+    script.src = "/assets/index-D36WQRm9.js";
     script.addEventListener("error", () => reportCrash("Não foi possível carregar a loja. Atualize a página."), {
       once: true,
     });
-    script.addEventListener(
-      "load",
-      () => {
-        const adminEnhancement = document.createElement("script");
-        adminEnhancement.type = "module";
-        adminEnhancement.src = `/admin-enhancements.js?v=${ENHANCEMENTS_VERSION}`;
-        document.body.appendChild(adminEnhancement);
-      },
-      { once: true },
-    );
     document.body.appendChild(script);
   }
 
