@@ -68,7 +68,9 @@ export function readBearer(request: Request) {
 }
 
 export function adminCredentialsOk(user: string, pass: string) {
-  return user === getEnv("ADMIN_USER") && pass === getEnv("ADMIN_PASS") && user.length > 0 && pass.length > 0;
+  const expectedUser = getEnv("ADMIN_USER").trim();
+  const expectedPass = getEnv("ADMIN_PASS").trim();
+  return user.trim() === expectedUser && pass === expectedPass && expectedUser.length > 0 && expectedPass.length > 0;
 }
 
 export async function requireAdmin(request: Request) {

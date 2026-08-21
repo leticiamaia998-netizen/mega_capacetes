@@ -2,50 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
-const ADMIN_USER_ID = "00000000-0000-4000-8000-000000000001";
-const STORAGE_KEYS = ["sb-qjsjexpmkctyusukxwgm-auth-token", "mcAdminSession"];
-
-function b64url(value: object) {
-  return btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function fakeJwt(email: string) {
-  const now = Math.floor(Date.now() / 1000);
-  const header = b64url({ alg: "HS256", typ: "JWT" });
-  const payload = b64url({
-    aud: "authenticated",
-    role: "authenticated",
-    sub: ADMIN_USER_ID,
-    email,
-    iat: now,
-    exp: now + 8 * 3600,
-  });
-  return `${header}.${payload}.mcadmin`;
-}
-
 function saveAdminSession(token: string, username: string) {
-  const access = fakeJwt(username);
-  const expiresAt = Math.floor(Date.now() / 1000) + 8 * 3600;
-  const session = {
-    access_token: access,
-    refresh_token: "mc-admin-refresh",
-    expires_in: 28800,
-    expires_at: expiresAt,
-    token_type: "bearer",
-    user: {
-      id: ADMIN_USER_ID,
-      aud: "authenticated",
-      role: "authenticated",
-      email: username.includes("@") ? username : `${username}@admin.local`,
-      app_metadata: { provider: "email" },
-      user_metadata: {},
-    },
-  };
   localStorage.setItem("mcAdminToken", token);
   localStorage.setItem("mcAdminUser", username);
-  for (const key of new Set([...STORAGE_KEYS, ...Object.keys(localStorage).filter((item) => item.includes("auth-token"))])) {
-    localStorage.setItem(key, JSON.stringify(session));
-  }
 }
 
 export default function AdminLoginPage() {
@@ -61,6 +20,7 @@ export default function AdminLoginPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data?.valid || data?.success) window.location.replace("/xxx");
+        else localStorage.removeItem("mcAdminToken");
       })
       .catch(() => {});
   }, []);
@@ -73,7 +33,7 @@ export default function AdminLoginPage() {
       const res = await fetch("/api/admin-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user, pass }),
+        body: JSON.stringify({ user: user.trim(), pass }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.token) {
