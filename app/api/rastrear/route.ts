@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     ))[0] || null;
   }
 
-  const timeline = timelineFrom(String(origem.origem_at || new Date().toISOString()), {
+  const rastreio = timelineFrom(String(origem.origem_at || new Date().toISOString()), {
     cidade: endereco?.cidade,
     estado: endereco?.estado,
   });
@@ -32,8 +32,13 @@ export async function GET(request: Request) {
     success: true,
     codigo: origem.codigo,
     nome_cliente: origem.nome_cliente || endereco?.nome,
+    email: endereco?.email || null,
     origem_at: origem.origem_at,
     endereco,
-    timeline,
+    timeline: rastreio.timeline,
+    status: rastreio.status,
+    previsao: rastreio.previsao,
+    falhaEntrega: rastreio.falhaEntrega,
+    aguardandoTaxa: rastreio.aguardandoTaxa,
   });
 }

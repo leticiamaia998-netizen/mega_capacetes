@@ -23,16 +23,21 @@ export async function POST(request: Request) {
           `id=eq.${origem.order_id}&select=cidade,estado,cep,rua,numero,complemento,bairro,nome`,
         ))[0] || null;
       }
+      const rastreio = timelineFrom(String(origem.origem_at || new Date().toISOString()), {
+        cidade: endereco?.cidade,
+        estado: endereco?.estado,
+      });
       return json({
         success: true,
         codigo: origem.codigo,
         nome_cliente: origem.nome_cliente || endereco?.nome,
         origem_at: origem.origem_at,
         endereco,
-        timeline: timelineFrom(String(origem.origem_at || new Date().toISOString()), {
-          cidade: endereco?.cidade,
-          estado: endereco?.estado,
-        }),
+        timeline: rastreio.timeline,
+        status: rastreio.status,
+        previsao: rastreio.previsao,
+        falhaEntrega: rastreio.falhaEntrega,
+        aguardandoTaxa: rastreio.aguardandoTaxa,
       });
     }
 
