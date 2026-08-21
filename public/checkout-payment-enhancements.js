@@ -52,10 +52,14 @@ function rewriteOffsiteSuccess(url) {
 }
 
 (function hijackPixSuccessRedirect() {
-  const assign = window.location.assign.bind(window.location);
-  const replace = window.location.replace.bind(window.location);
-  window.location.assign = (url) => assign(rewriteOffsiteSuccess(url));
-  window.location.replace = (url) => replace(rewriteOffsiteSuccess(url));
+  try {
+    const assign = window.location.assign.bind(window.location);
+    const replace = window.location.replace.bind(window.location);
+    window.location.assign = (url) => assign(rewriteOffsiteSuccess(url));
+    window.location.replace = (url) => replace(rewriteOffsiteSuccess(url));
+  } catch {
+    /* Chrome/Electron bloqueiam assign/replace como ES module ou propriedade read-only */
+  }
   try {
     const hrefDesc = Object.getOwnPropertyDescriptor(Location.prototype, "href");
     if (!hrefDesc?.set || !hrefDesc.get) return;
@@ -297,9 +301,21 @@ function syncPayButton() {
   if (label.nodeValue !== next) label.nodeValue = next;
 }
 
+function findPixLabel() {
+  for (const label of document.querySelectorAll("label")) {
+    const text = label.textContent || "";
+    if (text.includes("PIX") && /Aprova/i.test(text)) return label;
+  }
+  for (const label of document.querySelectorAll("label")) {
+    if (label.textContent?.includes("PIX")) return label;
+  }
+  const payButton = findPayButton();
+  return payButton?.closest("div")?.querySelector("label") || null;
+}
+
 function renderCardOption() {
   if (window.location.pathname !== "/checkout") return;
-  const pixLabel = [...document.querySelectorAll("label")].find((label) => label.textContent?.includes("PIX"));
+  const pixLabel = findPixLabel();
   if (!pixLabel?.parentElement) return;
 
   syncPayButton();
@@ -973,16 +989,27 @@ function ensureCheckoutWatcher() {
   observer.observe(document.body, { childList: true, subtree: true });
 
   window.addEventListener("popstate", onCheckoutRoute);
-  const pushState = history.pushState.bind(history);
-  const replaceState = history.replaceState.bind(history);
-  history.pushState = (...args) => {
-    pushState(...args);
-    onCheckoutRoute();
-  };
-  history.replaceState = (...args) => {
-    replaceState(...args);
-    onCheckoutRoute();
-  };
+  try {
+    const pushState = history.pushState.bind(history);
+    const replaceState = history.replaceState.bind(history);
+    history.pushState = (...args) => {
+      pushState(...args);
+      onCheckoutRoute();
+    };
+    history.replaceState = (...args) => {
+      replaceState(...args);
+      onCheckoutRoute();
+    };
+  } catch {
+    /* history indisponível para patch */
+  }
+
+  window.setInterval(() => {
+    if (window.location.pathname !== "/checkout") return;
+    if (document.getElementById(CARD_OPTION_ID)) return;
+    if (!findPixLabel()) return;
+    scheduleRenderCardOption();
+  }, 800);
 
   onCheckoutRoute();
 }

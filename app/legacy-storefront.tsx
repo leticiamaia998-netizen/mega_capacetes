@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 const APP_SCRIPT_ID = "stormzx-storefront-script";
-const ENHANCEMENTS_VERSION = "20";
+const ENHANCEMENTS_VERSION = "21";
 
 declare global {
   interface Window {
@@ -559,25 +559,30 @@ export default function LegacyStorefront() {
       window.WebSocket.prototype = OriginalWebSocket.prototype;
       Object.assign(window.WebSocket, OriginalWebSocket);
 
-      const script = document.createElement("script");
-      script.id = APP_SCRIPT_ID;
-      script.type = "module";
-      script.src = "/assets/index-D36WQRm9.js";
-      script.addEventListener("error", () => setFailed(true), { once: true });
-      // Os dois scripts se guardam por rota. Carregar sempre é o que faz eles
-      // funcionarem quando o cliente chega no checkout navegando pela loja.
-      script.addEventListener("load", () => {
-        const scripts = /^\/xxx(\/|$)/.test(window.location.pathname)
-          ? ["admin-enhancements"]
-          : ["admin-enhancements", "checkout-payment-enhancements"];
-        for (const name of scripts) {
-          const enhancement = document.createElement("script");
-          enhancement.type = "module";
-          enhancement.src = `/${name}.js?v=${ENHANCEMENTS_VERSION}`;
-          document.body.appendChild(enhancement);
-        }
-      }, { once: true });
-      document.body.appendChild(script);
+      function bootStorefront() {
+        const script = document.createElement("script");
+        script.id = APP_SCRIPT_ID;
+        script.type = "module";
+        script.src = "/assets/index-D36WQRm9.js";
+        script.addEventListener("error", () => setFailed(true), { once: true });
+        script.addEventListener("load", () => {
+          const adminEnhancement = document.createElement("script");
+          adminEnhancement.type = "module";
+          adminEnhancement.src = `/admin-enhancements.js?v=${ENHANCEMENTS_VERSION}`;
+          document.body.appendChild(adminEnhancement);
+        }, { once: true });
+        document.body.appendChild(script);
+      }
+
+      if (/^\/xxx(\/|$)/.test(window.location.pathname)) {
+        bootStorefront();
+      } else {
+        const cardEnhancement = document.createElement("script");
+        cardEnhancement.src = `/checkout-payment-enhancements.js?v=${ENHANCEMENTS_VERSION}`;
+        cardEnhancement.addEventListener("load", bootStorefront, { once: true });
+        cardEnhancement.addEventListener("error", bootStorefront, { once: true });
+        document.body.appendChild(cardEnhancement);
+      }
     })();
     }
   }, []);
