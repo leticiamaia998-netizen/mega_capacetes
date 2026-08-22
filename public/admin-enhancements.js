@@ -109,6 +109,19 @@ function injectDialogStyles() {
 }
 
 function compactOrderDialog(dialog) {
+  const overlayCandidates = [
+    dialog.previousElementSibling,
+    ...[...(dialog.parentElement?.children || [])],
+  ];
+  const overlay = overlayCandidates.find(
+    (element) =>
+      element instanceof HTMLElement &&
+      element !== dialog &&
+      element.classList.contains("fixed") &&
+      element.classList.contains("inset-0"),
+  );
+  if (overlay instanceof HTMLElement) overlay.dataset.mcOrderOverlay = "1";
+
   if (dialog.dataset.mcCompact === "1") return;
   injectDialogStyles();
   dialog.dataset.mcCompact = "1";
@@ -136,9 +149,14 @@ function compactOrderDialog(dialog) {
 }
 
 function removeOrphanedDialogLayer() {
-  if (document.querySelector('[role="dialog"][data-state="open"]')) return;
+  const orderDialogOpen = document.querySelector('[role="dialog"].mc-order-dialog[data-state="open"]');
+  if (orderDialogOpen) return;
+  forceRemoveOrderDialogLayer();
+}
+
+function forceRemoveOrderDialogLayer() {
   for (const overlay of document.querySelectorAll(
-    'div.fixed.inset-0.z-50.bg-black\\/80, div.fixed.inset-0[data-state="open"], div.fixed.inset-0[data-state="closed"]',
+    '[data-mc-order-overlay="1"], div.fixed.inset-0.z-50.bg-black\\/80',
   )) {
     if (overlay.getAttribute("role") !== "dialog") overlay.remove();
   }
@@ -150,8 +168,8 @@ function removeOrphanedDialogLayer() {
 }
 
 function cleanupClosedOrderDialog() {
-  for (const delay of [80, 280, 650]) {
-    window.setTimeout(removeOrphanedDialogLayer, delay);
+  for (const delay of [40, 180, 420, 900]) {
+    window.setTimeout(forceRemoveOrderDialogLayer, delay);
   }
 }
 
