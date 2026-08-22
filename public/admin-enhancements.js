@@ -135,18 +135,24 @@ function compactOrderDialog(dialog) {
   }
 }
 
+function removeOrphanedDialogLayer() {
+  if (document.querySelector('[role="dialog"][data-state="open"]')) return;
+  for (const overlay of document.querySelectorAll(
+    'div.fixed.inset-0.z-50.bg-black\\/80, div.fixed.inset-0[data-state="open"], div.fixed.inset-0[data-state="closed"]',
+  )) {
+    if (overlay.getAttribute("role") !== "dialog") overlay.remove();
+  }
+  document.body.style.removeProperty("pointer-events");
+  document.body.style.removeProperty("overflow");
+  document.body.style.removeProperty("padding-right");
+  document.body.style.removeProperty("margin-right");
+  document.body.removeAttribute("data-scroll-locked");
+}
+
 function cleanupClosedOrderDialog() {
-  window.setTimeout(() => {
-    if (findOrderDialog()) return;
-    for (const overlay of document.querySelectorAll('div.fixed.inset-0.z-50.bg-black\\/80')) {
-      overlay.remove();
-    }
-    document.body.style.removeProperty("pointer-events");
-    document.body.style.removeProperty("overflow");
-    document.body.style.removeProperty("padding-right");
-    document.body.style.removeProperty("margin-right");
-    document.body.removeAttribute("data-scroll-locked");
-  }, 260);
+  for (const delay of [80, 280, 650]) {
+    window.setTimeout(removeOrphanedDialogLayer, delay);
+  }
 }
 
 document.addEventListener(
@@ -154,10 +160,15 @@ document.addEventListener(
   (event) => {
     const button = event.target instanceof Element ? event.target.closest("button") : null;
     const dialog = button?.closest('[role="dialog"]');
-    if (!dialog || !dialog.textContent?.includes("Detalhes do Pedido")) return;
-    const label = button.getAttribute("aria-label") || button.textContent || "";
-    if (!/fechar|close/i.test(label) && !button.className.includes("absolute")) return;
-    cleanupClosedOrderDialog();
+    if (dialog?.textContent?.includes("Detalhes do Pedido")) {
+      const label = button.getAttribute("aria-label") || button.textContent || "";
+      if (/fechar|close/i.test(label) || button.className.includes("absolute")) {
+        cleanupClosedOrderDialog();
+      }
+      return;
+    }
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.matches('div.fixed.inset-0.z-50.bg-black\\/80')) cleanupClosedOrderDialog();
   },
   true,
 );
@@ -486,6 +497,8 @@ async function enhanceDialog(dialog) {
   host.append(container);
 }
 
+let orderDialogWasOpen = false;
+
 const observer = new MutationObserver(() => {
   if (!isAdminArea()) return;
   try {
@@ -493,8 +506,12 @@ const observer = new MutationObserver(() => {
     void enhanceOrderListRows();
     const dialog = findOrderDialog();
     if (dialog) {
+      orderDialogWasOpen = dialog.getAttribute("data-state") !== "closed";
       compactOrderDialog(dialog);
       void enhanceDialog(dialog);
+    } else if (orderDialogWasOpen) {
+      orderDialogWasOpen = false;
+      cleanupClosedOrderDialog();
     }
   } catch {
     /* nunca derruba o painel */
