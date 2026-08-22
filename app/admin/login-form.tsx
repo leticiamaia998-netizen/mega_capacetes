@@ -107,9 +107,6 @@ export default function LoginForm() {
     >
       <p style={{ margin: 0, fontSize: 12, letterSpacing: 1.4, color: "#a1a1aa", fontWeight: 700 }}>MEGACAPACETES</p>
       <h1 style={{ margin: "8px 0 20px", fontSize: 24 }}>Painel admin</h1>
-      <p style={{ margin: "0 0 18px", color: "#a1a1aa", fontSize: 13 }}>
-        Use o usuário e a senha configurados no Cloudflare (ADMIN_USER / ADMIN_PASS).
-      </p>
       <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Usuário</label>
       <input
         name="user"
