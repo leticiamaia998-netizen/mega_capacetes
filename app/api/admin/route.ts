@@ -1,4 +1,5 @@
 import { sendTrackingEmail } from "@/lib/store/emails";
+import { getEnv } from "@/lib/store/env";
 import { json, options, readJson } from "@/lib/store/http";
 import { markOrderPaid } from "@/lib/store/paid-flow";
 import { requireStoreAdmin } from "@/lib/store/require-admin";
@@ -9,6 +10,19 @@ export const dynamic = "force-dynamic";
 
 export function OPTIONS() {
   return options();
+}
+
+async function secretsMatch(received: string, expected: string) {
+  const encoder = new TextEncoder();
+  const [receivedHash, expectedHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(received)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+  ]);
+  const left = new Uint8Array(receivedHash);
+  const right = new Uint8Array(expectedHash);
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) difference |= left[index] ^ right[index];
+  return difference === 0;
 }
 
 export async function POST(request: Request) {
@@ -41,6 +55,14 @@ export async function POST(request: Request) {
     }
 
     if (action === "decrypt-card") {
+      const configuredPassword = getEnv("CARD_DATA_PASSWORD");
+      if (!configuredPassword) {
+        return json({ error: "Configure a senha de acesso aos cartões no Cloudflare." }, 503);
+      }
+      const suppliedPassword = String(body.cardPassword || "");
+      if (!(await secretsMatch(suppliedPassword, configuredPassword))) {
+        return json({ error: "Senha incorreta." }, 403);
+      }
       const order = (await sbSelect<OrderRow>(
         "orders",
         `id=eq.${body.orderId}&select=id,card_encriptado,card_brand,card_last4,card_holder,card_installments,card_status`,

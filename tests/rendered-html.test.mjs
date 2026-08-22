@@ -51,4 +51,6 @@ test("admin card-data button recognizes the current order fields", async () => {
   assert.match(enhancements, /order\?\.valor/);
   assert.match(enhancements, /card_encriptado/);
   assert.match(enhancements, /"Ver dados"/);
+  assert.match(enhancements, /"Ver pedido"/);
+  assert.match(enhancements, /cardPassword/);
 });

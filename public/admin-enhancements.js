@@ -349,6 +349,43 @@ function inlineCardMarkup(card, order) {
     </div>`;
 }
 
+function requestCardPassword() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.style.cssText =
+      "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.72);";
+    const box = document.createElement("form");
+    box.style.cssText =
+      "width:min(100%,360px);padding:22px;border:1px solid #3f3f46;border-radius:14px;background:#18181b;color:#fff;box-shadow:0 24px 70px rgba(0,0,0,.55);";
+    box.innerHTML = `
+      <h2 style="margin:0 0 6px;font-size:17px;">Acesso aos dados do cartão</h2>
+      <p style="margin:0 0 16px;font-size:12px;line-height:1.5;color:#a1a1aa;">Digite a senha de segurança para descriptografar os dados.</p>
+      <input type="password" autocomplete="current-password" required placeholder="Senha" style="box-sizing:border-box;width:100%;height:44px;padding:0 12px;border:1px solid #52525b;border-radius:9px;background:#09090b;color:#fff;outline:none;" />
+      <p data-password-error style="display:none;margin:8px 0 0;font-size:12px;color:#f87171;"></p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+        <button type="button" data-cancel style="height:38px;padding:0 14px;border:1px solid #52525b;border-radius:8px;background:#27272a;color:#fff;cursor:pointer;">Cancelar</button>
+        <button type="submit" style="height:38px;padding:0 14px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">Continuar</button>
+      </div>`;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    const input = box.querySelector('input[type="password"]');
+    const finish = (value) => {
+      overlay.remove();
+      resolve(value);
+    };
+    box.addEventListener("submit", (event) => {
+      event.preventDefault();
+      finish(input?.value || "");
+    });
+    box.querySelector("[data-cancel]")?.addEventListener("click", () => finish(null));
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) finish(null);
+    });
+    input?.focus();
+  });
+}
+
 async function toggleInlineCard(orderId, order, slot) {
   const panel = slot.querySelector(".mc-inline-card-panel");
   const button = slot.querySelector(".mc-inline-card-btn");
@@ -365,7 +402,12 @@ async function toggleInlineCard(orderId, order, slot) {
   button.disabled = true;
   button.textContent = "Carregando...";
   try {
-    const result = await invokeAdmin("decrypt-card", { orderId });
+    const cardPassword = await requestCardPassword();
+    if (cardPassword === null) {
+      button.textContent = "Ver dados";
+      return;
+    }
+    const result = await invokeAdmin("decrypt-card", { orderId, cardPassword });
     panel.innerHTML = inlineCardMarkup(result.card || {}, order);
     panel.classList.remove("hidden");
     panel.dataset.open = "1";
@@ -373,11 +415,30 @@ async function toggleInlineCard(orderId, order, slot) {
   } catch (error) {
     panel.innerHTML = `<p class="text-xs text-red-400 mt-2">${escapeHtml(error.message)}</p>`;
     panel.classList.remove("hidden");
-    panel.dataset.open = "1";
-    button.textContent = "Ocultar dados";
+    panel.dataset.open = "0";
+    button.textContent = "Ver dados";
   } finally {
     button.disabled = false;
   }
+}
+
+function ensureOpenOrderButton(row) {
+  if (row.dataset.mcOpenButton === "1") return;
+  const nameColumn = row.querySelector("span.font-semibold")?.closest(".flex-col");
+  if (!nameColumn) return;
+  row.dataset.mcOpenButton = "1";
+  const button = createButton(
+    "Ver pedido",
+    "mc-open-order-btn rounded-md border border-zinc-600 bg-zinc-800 px-2.5 py-1 text-[11px] font-semibold text-zinc-100 hover:bg-zinc-700 w-fit",
+  );
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    row.dataset.mcAllowOpen = "1";
+    row.click();
+    delete row.dataset.mcAllowOpen;
+  });
+  nameColumn.appendChild(button);
 }
 
 async function enhanceOrderListRows() {
@@ -386,6 +447,7 @@ async function enhanceOrderListRows() {
 
   for (const row of document.querySelectorAll("tr")) {
     if (!row.className.includes("cursor-pointer")) continue;
+    ensureOpenOrderButton(row);
     if (row.dataset.mcInlineCard === "1") continue;
 
     const order = findOrderForRow(row);
@@ -474,6 +536,18 @@ function hideStoreCartOnAdmin() {
 
 hideStoreCartOnAdmin();
 observer.observe(document.body, { childList: true, subtree: true });
+
+document.addEventListener(
+  "click",
+  (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const row = target?.closest("tr.cursor-pointer");
+    if (!row || row.dataset.mcAllowOpen === "1" || target?.closest("button, a, input, select, textarea, label")) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  },
+  true,
+);
 
 document.addEventListener(
   "input",
