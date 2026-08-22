@@ -1,9 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 590 96" role="img" aria-labelledby="title desc">
   <title id="title">MegaCapacetes</title>
-  <desc id="desc">Logotipo MegaCapacetes com destaque para as iniciais M e C</desc>
+  <desc id="desc">Logotipo MegaCapacetes com monograma MC</desc>
   <rect x="4" y="8" width="80" height="80" rx="22" fill="#0B1F3A"/>
-  <path d="M18 72V24h14l12 20 12-20h14v48H55V48L44 65 33 48v24H18Z" fill="#FFFFFF"/>
-  <path d="M72 32c-4-6-10-9-17-9-14 0-24 10-24 25s10 25 24 25c7 0 13-3 17-9L62 56c-2 3-4 4-7 4-6 0-10-5-10-12s4-12 10-12c3 0 5 1 7 4l10-8Z" fill="#4F8EDC"/>
+  <rect x="10" y="14" width="68" height="68" rx="17" fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="2"/>
+  <text x="44" y="63" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="36" font-weight="900" letter-spacing="-4">
+    <tspan fill="#FFFFFF">M</tspan><tspan fill="#4F8EDC">C</tspan>
+  </text>
   <text x="103" y="64" font-family="Arial Black, Space Grotesk, Arial, sans-serif" font-weight="900" letter-spacing="-1.5">
     <tspan fill="#0B1F3A" font-size="52">M</tspan><tspan fill="#0B1F3A" font-size="40">ega</tspan><tspan fill="#1D5CA8" font-size="52">C</tspan><tspan fill="#0B1F3A" font-size="40">apacetes</tspan>
   </text>
