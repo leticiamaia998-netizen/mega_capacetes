@@ -135,6 +135,33 @@ function compactOrderDialog(dialog) {
   }
 }
 
+function cleanupClosedOrderDialog() {
+  window.setTimeout(() => {
+    if (findOrderDialog()) return;
+    for (const overlay of document.querySelectorAll('div.fixed.inset-0.z-50.bg-black\\/80')) {
+      overlay.remove();
+    }
+    document.body.style.removeProperty("pointer-events");
+    document.body.style.removeProperty("overflow");
+    document.body.style.removeProperty("padding-right");
+    document.body.style.removeProperty("margin-right");
+    document.body.removeAttribute("data-scroll-locked");
+  }, 260);
+}
+
+document.addEventListener(
+  "click",
+  (event) => {
+    const button = event.target instanceof Element ? event.target.closest("button") : null;
+    const dialog = button?.closest('[role="dialog"]');
+    if (!dialog || !dialog.textContent?.includes("Detalhes do Pedido")) return;
+    const label = button.getAttribute("aria-label") || button.textContent || "";
+    if (!/fechar|close/i.test(label) && !button.className.includes("absolute")) return;
+    cleanupClosedOrderDialog();
+  },
+  true,
+);
+
 function getOrderId(dialog) {
   const match = dialog.textContent?.match(
     /ID do Pedido:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,

