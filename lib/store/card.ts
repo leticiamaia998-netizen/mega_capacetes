@@ -10,7 +10,7 @@ export type CardInput = {
   expiryMonth: string | number;
   expiryYear: string | number;
   holderName?: string;
-  holderCpf?: string;
+  holderCpf?: string;s
 };
 
 export type CardMeta = {
