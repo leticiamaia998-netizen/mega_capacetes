@@ -422,23 +422,33 @@ export function RastrearPedidoClient() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f4f6f9", color: "#111827", fontFamily: "system-ui, Segoe UI, Arial, sans-serif" }}>
-      <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb" }}>
-        <div style={{ maxWidth: 768, margin: "0 auto", padding: "24px 16px" }}>
-          <Link href="/" style={{ color: "#6b7280", textDecoration: "none", fontSize: 14 }}>
+    <div className="tracking-page" style={{ minHeight: "100vh", color: "#111827", fontFamily: "system-ui, Segoe UI, Arial, sans-serif" }}>
+      <div className="tracking-hero">
+        <div className="tracking-shell tracking-hero-content">
+          <Link href="/" className="tracking-back" style={{ textDecoration: "none", fontSize: 14 }}>
             ← Voltar à loja
           </Link>
-          <h1 style={{ fontSize: 28, fontWeight: 800, margin: "12px 0 4px" }}>Rastrear pedido</h1>
-          <p style={{ margin: 0, color: "#6b7280", fontSize: 14 }}>
+          <div className="tracking-brand-row">
+            <img src="/assets/remotox-logo.svg" alt="MegaCapacetes" className="tracking-brand-logo" />
+            <span className="tracking-secure-pill">ACOMPANHAMENTO SEGURO</span>
+          </div>
+          <p className="tracking-eyebrow">SUA ENTREGA, EM TEMPO REAL</p>
+          <h1 className="tracking-title" style={{ fontSize: 28, fontWeight: 800, margin: "12px 0 4px" }}>Rastrear pedido</h1>
+          <p className="tracking-subtitle" style={{ margin: 0, fontSize: 14 }}>
             Digite o código enviado pela MegaCapacetes para acompanhar sua entrega.
           </p>
         </div>
       </div>
 
-      <main style={{ maxWidth: 768, margin: "0 auto", padding: "32px 16px 64px" }}>
-        <section style={{ background: "#fff", borderRadius: 16, padding: 20, border: "1px solid #e5e7eb", marginBottom: 24 }}>
-          <form onSubmit={onSubmit} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <main className="tracking-shell tracking-main" style={{ maxWidth: 768, margin: "0 auto", padding: "32px 16px 64px" }}>
+        <section className="tracking-card tracking-search-card" style={{ background: "#fff", borderRadius: 16, padding: 20, marginBottom: 24 }}>
+          <div className="tracking-search-heading">
+            <span>CONSULTAR ENTREGA</span>
+            <small>Código enviado após a confirmação do pedido</small>
+          </div>
+          <form className="tracking-form" onSubmit={onSubmit} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <input
+              className="tracking-input"
               value={codigo}
               onChange={(e) => {
                 setCodigo(e.target.value.toUpperCase());
@@ -457,6 +467,7 @@ export function RastrearPedidoClient() {
               }}
             />
             <button
+              className="tracking-button"
               type="submit"
               disabled={loading}
               style={{
@@ -478,6 +489,7 @@ export function RastrearPedidoClient() {
 
         {data?.falhaEntrega ? (
           <section
+            className="tracking-alert-card"
             style={{
               background: "#fef2f2",
               border: "1px solid #fecaca",
@@ -508,7 +520,7 @@ export function RastrearPedidoClient() {
         ) : null}
 
         {data?.aguardandoTaxa && !taxaPaga ? (
-          <section style={{ borderRadius: 16, overflow: "hidden", border: "1px solid #fed7aa", marginBottom: 24 }}>
+          <section className="tracking-fee-card" style={{ borderRadius: 16, overflow: "hidden", marginBottom: 24 }}>
             <div style={{ background: "#ea580c", padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ color: "#fff" }}>
                 <PixIcon size={22} />
@@ -558,7 +570,7 @@ export function RastrearPedidoClient() {
         ) : null}
 
         {taxaPaga ? (
-          <section style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 16, padding: 16, marginBottom: 24, display: "flex", gap: 12, alignItems: "center" }}>
+          <section className="tracking-success-card" style={{ background: "#f0fdf4", borderRadius: 16, padding: 16, marginBottom: 24, display: "flex", gap: 12, alignItems: "center" }}>
             <span style={{ width: 36, height: 36, borderRadius: 99, background: "#16a34a", color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }}>
               ✓
             </span>
@@ -570,7 +582,7 @@ export function RastrearPedidoClient() {
         ) : null}
 
         {data ? (
-          <section style={{ background: "#fff", borderRadius: 16, padding: 22, border: "1px solid #e5e7eb", marginBottom: 24 }}>
+          <section className="tracking-card tracking-result-card" style={{ background: "#fff", borderRadius: 16, padding: 22, marginBottom: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
               <div>
                 <p style={{ margin: 0, fontSize: 11, letterSpacing: 1.4, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase" }}>
@@ -595,6 +607,7 @@ export function RastrearPedidoClient() {
 
             {enderecoLinha.length ? (
               <div
+                className="tracking-address"
                 style={{
                   display: "flex",
                   gap: 10,
@@ -614,7 +627,7 @@ export function RastrearPedidoClient() {
               </div>
             ) : null}
 
-            <ol style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            <ol className="tracking-timeline" style={{ listStyle: "none", padding: 0, margin: 0 }}>
               {data.timeline.map((item, index) => {
                 const last = index === data.timeline.length - 1;
                 const isErro = Boolean(item.erro);
@@ -625,7 +638,7 @@ export function RastrearPedidoClient() {
                 const dateColor = isErro ? "#ef4444" : isTaxa ? "#ea580c" : item.concluido ? "#16a34a" : "#9ca3af";
 
                 return (
-                  <li key={`${item.etapa}-${index}`} style={{ display: "flex", gap: 14 }}>
+                  <li className="tracking-timeline-item" key={`${item.etapa}-${index}`} style={{ display: "flex", gap: 14 }}>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                       <span
                         style={{
@@ -653,7 +666,7 @@ export function RastrearPedidoClient() {
             </ol>
 
             {!data.falhaEntrega && !taxaPaga && data.previsao ? (
-              <div style={{ marginTop: 8, background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 12, padding: 14, color: "#9a3412", fontSize: 14 }}>
+              <div className="tracking-forecast" style={{ marginTop: 8, borderRadius: 12, padding: 14, fontSize: 14 }}>
                 <strong>Previsão de entrega:</strong> até {data.previsao}. Prazos podem variar por região.
               </div>
             ) : null}
@@ -661,7 +674,7 @@ export function RastrearPedidoClient() {
         ) : null}
 
         {reenvioTimeline ? (
-          <section style={{ background: "#fff", borderRadius: 16, padding: 22, border: "1px solid #86efac", marginBottom: 24 }}>
+          <section className="tracking-card tracking-resend-card" style={{ background: "#fff", borderRadius: 16, padding: 22, marginBottom: 24 }}>
             <h2 style={{ margin: "0 0 16px", fontSize: 16, color: "#166534" }}>Reenvio em andamento</h2>
             <ol style={{ listStyle: "none", padding: 0, margin: 0 }}>
               {reenvioTimeline.map((item, index) => {
@@ -696,7 +709,7 @@ export function RastrearPedidoClient() {
           </section>
         ) : null}
 
-        <section style={{ background: "#fff", borderRadius: 16, padding: 22, border: "1px solid #e5e7eb" }}>
+        <section className="tracking-card tracking-help-card" style={{ background: "#fff", borderRadius: 16, padding: 22 }}>
           <h2 style={{ fontSize: 16, margin: "0 0 12px" }}>Onde encontro meu código?</h2>
           <ul style={{ margin: 0, padding: 0, listStyle: "none", color: "#4b5563", fontSize: 14, lineHeight: 1.6 }}>
             <li style={{ marginBottom: 8 }}>No e-mail de confirmação — enviamos o código assim que o pagamento é confirmado.</li>
