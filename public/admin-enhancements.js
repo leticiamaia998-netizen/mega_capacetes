@@ -309,11 +309,16 @@ function formatCpf(value) {
 }
 
 function orderHasCard(order) {
-  return Boolean(order?.metodo_pagamento === "card" || order?.card_last4 || order?.card_encriptado);
+  const method = String(order?.metodo_pagamento || order?.payment_method || "").toLowerCase();
+  return Boolean(
+    ["card", "credit_card", "cartao", "cartão"].includes(method) ||
+      order?.card_last4 ||
+      order?.card_encriptado,
+  );
 }
 
 function orderTotal(order) {
-  const raw = order?.total_amount ?? order?.total ?? order?.valor_total ?? 0;
+  const raw = order?.total_amount ?? order?.total ?? order?.valor_total ?? order?.valor ?? order?.amount ?? 0;
   return typeof raw === "number" ? raw : parseFloat(String(raw || "0"));
 }
 

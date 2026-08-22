@@ -41,3 +41,14 @@ test("admin bundle never redirects to the legacy xxx route", async () => {
 
   assert.doesNotMatch(adminBundle, /\/xxx(?:\/login)?/);
 });
+
+test("admin card-data button recognizes the current order fields", async () => {
+  const enhancements = await readFile(
+    new URL("../public/admin-enhancements.js", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(enhancements, /order\?\.valor/);
+  assert.match(enhancements, /card_encriptado/);
+  assert.match(enhancements, /"Ver dados"/);
+});
