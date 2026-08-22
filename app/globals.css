@@ -94,10 +94,10 @@ html[data-mc-admin="1"] body {
 .tracking-title {
   margin-top: 9px !important;
   color: #fff;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Space Grotesk", Inter, system-ui, sans-serif;
   font-size: clamp(36px, 7vw, 52px) !important;
-  font-weight: 500 !important;
-  letter-spacing: -0.035em;
+  font-weight: 700 !important;
+  letter-spacing: -0.045em;
   line-height: 1.04;
 }
 
@@ -178,16 +178,111 @@ html[data-mc-admin="1"] body {
   box-shadow: 0 15px 28px rgba(7, 20, 38, 0.25);
 }
 
-.tracking-result-card { padding: 28px !important; }
-
-.tracking-address {
-  background: #f6f8fa !important;
-  border-color: #e2e7ed !important;
-  color: #536176 !important;
+.tracking-result-card {
+  position: relative;
+  overflow: hidden;
+  padding: 0 0 28px !important;
+  border-color: rgba(7, 20, 38, 0.16) !important;
 }
 
-.tracking-timeline { padding-top: 4px !important; }
-.tracking-timeline-item strong { font-size: 14px; letter-spacing: -0.01em; }
+.tracking-result-card::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, #c69a52, #f1d49d 36%, #4f8edc 74%, #173b65);
+}
+
+.tracking-order-header {
+  position: relative;
+  overflow: hidden;
+  align-items: center;
+  margin: 0 0 20px !important;
+  padding: 30px 28px 26px;
+  background:
+    linear-gradient(112deg, rgba(255, 255, 255, 0.035), transparent 36%),
+    linear-gradient(135deg, #0d2139, #071426 72%);
+}
+
+.tracking-order-header::after {
+  content: "";
+  position: absolute;
+  right: -48px;
+  top: -75px;
+  width: 190px;
+  height: 190px;
+  border: 1px solid rgba(198, 154, 82, 0.17);
+  border-radius: 50%;
+  box-shadow: 0 0 0 28px rgba(255, 255, 255, 0.018), 0 0 0 56px rgba(255, 255, 255, 0.012);
+  pointer-events: none;
+}
+
+.tracking-order-label {
+  color: #d4aa64 !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.18em !important;
+}
+
+.tracking-order-code {
+  color: #fff !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 25px !important;
+  letter-spacing: 0.075em !important;
+}
+
+.tracking-customer { color: #b7c4d4 !important; }
+
+.tracking-status-badge {
+  position: relative;
+  z-index: 1;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  letter-spacing: 0.02em;
+}
+
+.tracking-address {
+  margin: 0 28px 24px !important;
+  padding: 14px 16px !important;
+  background: linear-gradient(135deg, #f4f7fa, #eef2f6) !important;
+  border-color: #d9e0e8 !important;
+  border-radius: 14px !important;
+  color: #435268 !important;
+  line-height: 1.5;
+}
+
+.tracking-timeline {
+  position: relative;
+  margin: 0 28px !important;
+  padding: 4px 0 0 !important;
+}
+
+.tracking-timeline::before {
+  content: "ROTA DO PEDIDO";
+  display: block;
+  margin-bottom: 20px;
+  color: #76859a;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+
+.tracking-timeline-item {
+  position: relative;
+  gap: 16px !important;
+}
+
+.tracking-timeline-item > div:last-child {
+  width: 100%;
+  margin: -3px 0 10px;
+  padding: 0 0 17px;
+  border-bottom: 1px solid #edf0f3;
+}
+
+.tracking-timeline-item:last-child > div:last-child { border-bottom: 0; }
+.tracking-step-title { font-size: 14px; font-weight: 850; letter-spacing: -0.01em; }
+.tracking-step-description { max-width: 590px; margin-top: 5px !important; line-height: 1.55; }
+.tracking-step-date { margin-top: 6px !important; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px !important; letter-spacing: 0.015em; }
 .tracking-forecast { background: #faf5eb !important; border: 1px solid #ead7b2 !important; color: #75511e !important; }
 .tracking-fee-card { border-color: rgba(234, 88, 12, 0.2) !important; }
 .tracking-success-card, .tracking-resend-card { border-color: rgba(22, 163, 74, 0.22) !important; }
@@ -221,6 +316,10 @@ html[data-mc-admin="1"] body {
   .tracking-title { font-size: 40px !important; }
   .tracking-main { width: min(100% - 24px, 768px); }
   .tracking-search-card, .tracking-result-card { padding: 20px !important; }
+  .tracking-result-card { padding: 0 0 22px !important; }
+  .tracking-order-header { padding: 26px 20px 22px; }
+  .tracking-address { margin: 0 20px 22px !important; }
+  .tracking-timeline { margin: 0 20px !important; }
   .tracking-search-heading { display: block; }
   .tracking-search-heading small { display: block; margin-top: 5px; }
   .tracking-form { flex-wrap: wrap !important; }

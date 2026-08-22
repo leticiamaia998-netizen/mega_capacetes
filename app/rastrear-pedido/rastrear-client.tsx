@@ -583,15 +583,16 @@ export function RastrearPedidoClient() {
 
         {data ? (
           <section className="tracking-card tracking-result-card" style={{ background: "#fff", borderRadius: 16, padding: 22, marginBottom: 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+            <div className="tracking-order-header" style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
               <div>
-                <p style={{ margin: 0, fontSize: 11, letterSpacing: 1.4, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase" }}>
+                <p className="tracking-order-label" style={{ margin: 0, fontSize: 11, letterSpacing: 1.4, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase" }}>
                   Pedido
                 </p>
-                <p style={{ margin: "4px 0 0", fontSize: 22, fontWeight: 800, letterSpacing: 1 }}>{data.codigo}</p>
-                {data.nome_cliente ? <p style={{ margin: "4px 0 0", color: "#6b7280", fontSize: 13 }}>{data.nome_cliente}</p> : null}
+                <p className="tracking-order-code" style={{ margin: "4px 0 0", fontSize: 22, fontWeight: 800, letterSpacing: 1 }}>{data.codigo}</p>
+                {data.nome_cliente ? <p className="tracking-customer" style={{ margin: "4px 0 0", color: "#6b7280", fontSize: 13 }}>{data.nome_cliente}</p> : null}
               </div>
               <span
+                className="tracking-status-badge"
                 style={{
                   alignSelf: "flex-start",
                   fontSize: 12,
@@ -654,9 +655,9 @@ export function RastrearPedidoClient() {
                       ) : null}
                     </div>
                     <div style={{ paddingBottom: 18 }}>
-                      <strong style={{ color: titleColor }}>{item.etapa}</strong>
-                      <div style={{ color: "#6b7280", fontSize: 13, marginTop: 2 }}>{item.descricao}</div>
-                      <div style={{ color: dateColor, fontSize: 12, fontWeight: 700, marginTop: 2 }}>
+                      <strong className="tracking-step-title" style={{ color: titleColor }}>{item.etapa}</strong>
+                      <div className="tracking-step-description" style={{ color: "#6b7280", fontSize: 13, marginTop: 2 }}>{item.descricao}</div>
+                      <div className="tracking-step-date" style={{ color: dateColor, fontSize: 12, fontWeight: 700, marginTop: 2 }}>
                         {formatTimelineWhen(item.data, item.concluido && !isErro)}
                       </div>
                     </div>
