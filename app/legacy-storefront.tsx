@@ -574,6 +574,29 @@ export default function LegacyStorefront() {
         document.body.appendChild(script);
       }
 
+      function ensureTrackingFooterLink() {
+        if (document.querySelector('footer a[href="/rastrear-pedido"]')) return true;
+        const heading = [...document.querySelectorAll("footer h1, footer h2, footer h3, footer h4")].find(
+          (element) => element.textContent?.trim() === "Institucional",
+        );
+        const list = heading?.parentElement?.querySelector("ul");
+        if (!list) return false;
+        const item = document.createElement("li");
+        const link = document.createElement("a");
+        link.href = "/rastrear-pedido";
+        link.textContent = "Rastrear pedido";
+        item.appendChild(link);
+        list.appendChild(item);
+        return true;
+      }
+
+      if (!ensureTrackingFooterLink()) {
+        const footerObserver = new MutationObserver(() => {
+          if (ensureTrackingFooterLink()) footerObserver.disconnect();
+        });
+        footerObserver.observe(document.body, { childList: true, subtree: true });
+      }
+
       if (/^\/admin\/login(\/|$)/.test(window.location.pathname)) {
         bootStorefront();
       } else {
