@@ -79,15 +79,16 @@ function injectDialogStyles() {
       max-width: min(26rem, calc(100vw - 1.5rem)) !important;
       max-height: min(80vh, 620px) !important;
       width: 100% !important;
-      padding: 0 !important;
-      display: flex !important;
-      flex-direction: column !important;
-      overflow: hidden !important;
+      padding: 1rem !important;
+      display: block !important;
+      overflow-y: auto !important;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
       gap: 0 !important;
     }
     [role="dialog"].mc-order-dialog .mc-dialog-header {
       flex-shrink: 0;
-      padding: 1rem 1rem 0.5rem;
+      padding: 0 0 0.5rem;
     }
     [role="dialog"].mc-order-dialog .mc-dialog-body {
       overflow-y: auto;
@@ -109,87 +110,19 @@ function injectDialogStyles() {
 }
 
 function compactOrderDialog(dialog) {
-  const overlayCandidates = [
-    dialog.previousElementSibling,
-    ...[...(dialog.parentElement?.children || [])],
-  ];
-  const overlay = overlayCandidates.find(
-    (element) =>
-      element instanceof HTMLElement &&
-      element !== dialog &&
-      element.classList.contains("fixed") &&
-      element.classList.contains("inset-0"),
-  );
-  if (overlay instanceof HTMLElement) overlay.dataset.mcOrderOverlay = "1";
-
   if (dialog.dataset.mcCompact === "1") return;
   injectDialogStyles();
   dialog.dataset.mcCompact = "1";
   dialog.classList.add("mc-order-dialog");
+  dialog.removeAttribute("aria-describedby");
 
-  const closeBtn = dialog.querySelector('button[class*="absolute"]');
   const header = [...dialog.children].find((child) =>
     child.textContent?.includes("Detalhes do Pedido"),
   );
   if (header) {
     header.classList.add("mc-dialog-header");
   }
-
-  const scroll = document.createElement("div");
-  scroll.className = "mc-dialog-body";
-
-  for (const child of [...dialog.children]) {
-    if (child === closeBtn || child === header || child.classList.contains("mc-dialog-body")) continue;
-    scroll.appendChild(child);
-  }
-
-  if (scroll.childElementCount > 0) {
-    dialog.insertBefore(scroll, closeBtn || null);
-  }
 }
-
-function removeOrphanedDialogLayer() {
-  const orderDialogOpen = document.querySelector('[role="dialog"].mc-order-dialog[data-state="open"]');
-  if (orderDialogOpen) return;
-  forceRemoveOrderDialogLayer();
-}
-
-function forceRemoveOrderDialogLayer() {
-  for (const overlay of document.querySelectorAll(
-    '[data-mc-order-overlay="1"], div.fixed.inset-0.z-50.bg-black\\/80',
-  )) {
-    if (overlay.getAttribute("role") !== "dialog") overlay.remove();
-  }
-  document.body.style.removeProperty("pointer-events");
-  document.body.style.removeProperty("overflow");
-  document.body.style.removeProperty("padding-right");
-  document.body.style.removeProperty("margin-right");
-  document.body.removeAttribute("data-scroll-locked");
-}
-
-function cleanupClosedOrderDialog() {
-  for (const delay of [40, 180, 420, 900]) {
-    window.setTimeout(forceRemoveOrderDialogLayer, delay);
-  }
-}
-
-document.addEventListener(
-  "click",
-  (event) => {
-    const button = event.target instanceof Element ? event.target.closest("button") : null;
-    const dialog = button?.closest('[role="dialog"]');
-    if (dialog?.textContent?.includes("Detalhes do Pedido")) {
-      const label = button.getAttribute("aria-label") || button.textContent || "";
-      if (/fechar|close/i.test(label) || button.className.includes("absolute")) {
-        cleanupClosedOrderDialog();
-      }
-      return;
-    }
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.matches('div.fixed.inset-0.z-50.bg-black\\/80')) cleanupClosedOrderDialog();
-  },
-  true,
-);
 
 function getOrderId(dialog) {
   const match = dialog.textContent?.match(
@@ -515,8 +448,6 @@ async function enhanceDialog(dialog) {
   host.append(container);
 }
 
-let orderDialogWasOpen = false;
-
 const observer = new MutationObserver(() => {
   if (!isAdminArea()) return;
   try {
@@ -524,12 +455,8 @@ const observer = new MutationObserver(() => {
     void enhanceOrderListRows();
     const dialog = findOrderDialog();
     if (dialog) {
-      orderDialogWasOpen = dialog.getAttribute("data-state") !== "closed";
       compactOrderDialog(dialog);
       void enhanceDialog(dialog);
-    } else if (orderDialogWasOpen) {
-      orderDialogWasOpen = false;
-      cleanupClosedOrderDialog();
     }
   } catch {
     /* nunca derruba o painel */
